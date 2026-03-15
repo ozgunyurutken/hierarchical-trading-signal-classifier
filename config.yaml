@@ -18,10 +18,18 @@ data:
   start_date: "2021-01-01"
   end_date: "2025-12-31"
 
-  macro_monthly:
+  # Monthly FRED data (requires fredapi + API key)
+  # If unavailable, yfinance yield proxies are used instead
+  macro_monthly_fred:
     FEDFUNDS: "Federal Funds Rate"
     CPIAUCSL: "CPI All Urban Consumers"
     UNRATE: "Unemployment Rate"
+
+  # yfinance proxies for rate environment (no API key needed)
+  macro_yield_proxies:
+    "^TNX": "US10Y_Yield"
+    "^IRX": "US3M_Yield"
+    "^FVX": "US5Y_Yield"
 
   macro_daily:
     "^GSPC": "S&P 500"
