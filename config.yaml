@@ -12,30 +12,64 @@ paths:
 
 # --- Data Collection ---
 data:
+  # Each coin has its own start date (max history available)
   symbols:
-    - "BTC-USD"
-    - "ETH-USD"
-  start_date: "2021-01-01"
+    BTC-USD:
+      start_date: "2014-09-17"
+    ETH-USD:
+      start_date: "2017-11-09"
   end_date: "2025-12-31"
 
-  # Monthly FRED data (requires fredapi + API key)
-  # If unavailable, yfinance yield proxies are used instead
-  macro_monthly_fred:
+  # Macro start: earliest common date across all macro tickers
+  macro_start_date: "2007-04-11"  # HYG is the youngest macro ticker
+
+  # Timezone alignment: macro data is shifted 1 day forward.
+  # NYSE closes at 21:00 UTC, crypto daily candle closes at 00:00 UTC.
+  # So T-day S&P close is only usable for T+1 crypto signals.
+  macro_lag_days: 1
+
+  # --- Macro: Risk Appetite & Volatility ---
+  macro_risk:
+    "^GSPC": "SP500"
+    "^VIX": "VIX"
+    "DX-Y.NYB": "DXY"
+
+  # --- Macro: Commodities & Store of Value ---
+  macro_commodities:
+    "GC=F": "Gold"
+    "SI=F": "Silver"
+    "CL=F": "Oil_WTI"
+
+  # --- Macro: Bond Yields (rate environment) ---
+  macro_yields:
+    "^TNX": "US10Y"
+    "^FVX": "US5Y"
+    "^IRX": "US3M"
+    "^TYX": "US30Y"
+    "ZT=F": "US2Y"
+
+  # --- Macro: Credit & Inflation Proxies ---
+  macro_credit:
+    "HYG": "HY_Bond"    # High Yield corporate bond ETF
+    "LQD": "IG_Bond"    # Investment Grade bond ETF
+    "TLT": "Treasury20Y" # Long-term treasury ETF
+    "TIP": "TIPS"        # Inflation-protected securities ETF
+
+  # --- Derived spreads (computed in feature engineering, not downloaded) ---
+  # Yield_Curve_10Y_2Y:  US10Y - US2Y
+  # Yield_Curve_10Y_3M:  US10Y - US3M
+  # Credit_Spread:       log(HYG) - log(LQD) returns
+  # Gold_Silver_Ratio:   Gold / Silver
+  # Breakeven_Inflation: US10Y - TIPS yield proxy
+  # Real_Rate:           US10Y - Breakeven_Inflation
+
+  # --- Optional: FRED monthly (requires fredapi + FRED_API_KEY) ---
+  macro_fred_optional:
     FEDFUNDS: "Federal Funds Rate"
     CPIAUCSL: "CPI All Urban Consumers"
     UNRATE: "Unemployment Rate"
-
-  # yfinance proxies for rate environment (no API key needed)
-  macro_yield_proxies:
-    "^TNX": "US10Y_Yield"
-    "^IRX": "US3M_Yield"
-    "^FVX": "US5Y_Yield"
-
-  macro_daily:
-    "^GSPC": "S&P 500"
-    "GC=F": "Gold Futures"
-    "DX-Y.NYB": "DXY Dollar Index"
-    "^VIX": "VIX Volatility"
+    WM2NS: "M2 Money Supply"
+    ICSA: "Initial Jobless Claims"
 
 # --- Feature Engineering ---
 features:

@@ -1,7 +1,13 @@
 """
 Data alignment module.
-Aligns crypto OHLCV with daily macro and yield proxy data on a common daily timeline.
-Handles forward-fill for weekends/holidays and NaN cleanup.
+Aligns crypto OHLCV with daily macro data on a common daily timeline.
+
+Key design decisions:
+  1. Forward-fill: weekends/holidays filled from last trading day.
+  2. Timezone lag: macro data shifted by macro_lag_days (default 1 day).
+     NYSE closes at 21:00 UTC, crypto daily candle closes at 00:00 UTC.
+     So T-day macro close is only usable for T+1 crypto signals.
+  3. NaN rows at the start (before first macro data point) are dropped.
 """
 
 import pandas as pd
@@ -18,6 +24,8 @@ FRED_RELEASE_DELAYS = {
     "FEDFUNDS": 1,
     "CPIAUCSL": 45,
     "UNRATE": 35,
+    "WM2NS": 14,
+    "ICSA": 5,
 }
 
 
@@ -25,14 +33,40 @@ def align_market_data_to_crypto(
     market_df: pd.DataFrame,
     crypto_index: pd.DatetimeIndex,
     name: str = "market",
+    lag_days: int = 0,
 ) -> pd.DataFrame:
     """
     Align market data (weekday-only) to crypto daily index (24/7).
-    Forward-fills weekends and holidays from last trading day.
-    """
-    aligned = market_df.reindex(crypto_index, method="ffill")
 
-    original_non_nan = market_df.reindex(crypto_index).notna().sum().sum()
+    Steps:
+      1. If lag_days > 0, shift market data forward (preventing look-ahead).
+      2. Forward-fill weekends and holidays from last trading day.
+
+    Parameters
+    ----------
+    market_df : pd.DataFrame
+        Market data with DatetimeIndex (weekday-only).
+    crypto_index : pd.DatetimeIndex
+        Full daily crypto index (24/7).
+    name : str
+        Label for logging.
+    lag_days : int
+        Number of days to shift market data forward.
+        Default 0 (no shift). Set to 1 for timezone alignment.
+    """
+    df = market_df.copy()
+
+    # Apply timezone lag: shift market data forward so T-day macro
+    # is only available on T+lag day for crypto
+    if lag_days > 0:
+        df.index = df.index + pd.Timedelta(days=lag_days)
+        logger.info(f"  {name}: applied {lag_days}-day forward shift (timezone lag)")
+
+    # Reindex to crypto daily calendar with forward-fill
+    aligned = df.reindex(crypto_index, method="ffill")
+
+    # Logging: how many gaps were filled
+    original_non_nan = df.reindex(crypto_index).notna().sum().sum()
     aligned_non_nan = aligned.notna().sum().sum()
     n_filled = aligned_non_nan - original_non_nan
     n_still_nan = aligned.isna().sum().sum()
@@ -67,8 +101,7 @@ def align_fred_monthly_to_daily(
 
 def create_aligned_dataset(
     price_df: pd.DataFrame,
-    macro_daily: pd.DataFrame,
-    macro_yields: pd.DataFrame,
+    macro_dfs: dict[str, pd.DataFrame],
     fred_monthly: pd.DataFrame | None = None,
     coin_name: str = "btc",
     save: bool = True,
@@ -78,50 +111,66 @@ def create_aligned_dataset(
 
     Combines:
       - Crypto OHLCV (24/7 daily)
-      - Market macro (S&P, Gold, DXY, VIX — forward-filled)
-      - Yield proxies (10Y, 5Y, 3M, Spread — forward-filled)
+      - All macro categories (forward-filled + timezone-lagged)
       - (Optional) FRED monthly — release-date-shifted, forward-filled
+
+    Parameters
+    ----------
+    price_df : pd.DataFrame
+        Crypto OHLCV data with DatetimeIndex.
+    macro_dfs : dict[str, pd.DataFrame]
+        Dict of macro category DataFrames.
+        Keys like 'risk', 'commodities', 'yields', 'credit'.
+    fred_monthly : pd.DataFrame or None
+        Optional monthly FRED data.
+    coin_name : str
+        Coin identifier for file naming ('btc', 'eth').
+    save : bool
+        Whether to save the result to CSV.
     """
     config = cfg()
     root = get_project_root()
+    lag_days = config["data"].get("macro_lag_days", 1)
     crypto_index = price_df.index
 
-    logger.info(f"Aligning data for {coin_name.upper()}: {len(crypto_index)} trading days")
+    logger.info(f"Aligning data for {coin_name.upper()}: {len(crypto_index)} trading days, lag={lag_days}d")
 
     # Start with OHLCV
     aligned = price_df.copy()
 
-    # Align daily macro
-    if not macro_daily.empty:
-        daily_aligned = align_market_data_to_crypto(macro_daily, crypto_index, "macro_daily")
-        aligned = aligned.join(daily_aligned, how="left")
-
-    # Align yield proxies
-    if not macro_yields.empty:
-        yields_aligned = align_market_data_to_crypto(macro_yields, crypto_index, "yields")
-        aligned = aligned.join(yields_aligned, how="left")
+    # Align each macro category with timezone lag
+    for category_name, macro_df in macro_dfs.items():
+        if macro_df is not None and not macro_df.empty:
+            cat_aligned = align_market_data_to_crypto(
+                macro_df, crypto_index,
+                name=category_name,
+                lag_days=lag_days,
+            )
+            aligned = aligned.join(cat_aligned, how="left")
 
     # Align FRED monthly (if available)
     if fred_monthly is not None and not fred_monthly.empty:
         fred_aligned = align_fred_monthly_to_daily(fred_monthly, crypto_index)
         aligned = aligned.join(fred_aligned, how="left")
-        logger.info(f"  FRED monthly aligned")
+        logger.info(f"  FRED monthly aligned: {list(fred_aligned.columns)}")
 
     # Report NaN before dropping
     nan_per_col = aligned.isna().sum()
     nan_cols = nan_per_col[nan_per_col > 0]
     if len(nan_cols) > 0:
-        logger.info(f"  NaN per column:\n{nan_cols}")
+        logger.info(f"  NaN per column before dropna:\n{nan_cols}")
 
     rows_before = len(aligned)
     aligned = aligned.dropna()
     rows_after = len(aligned)
     rows_lost = rows_before - rows_after
 
+    pct_lost = (rows_lost / rows_before * 100) if rows_before > 0 else 0
     logger.info(
         f"  Dropped {rows_lost} rows ({rows_before} -> {rows_after}, "
-        f"lost {rows_lost / rows_before * 100:.1f}%)"
+        f"lost {pct_lost:.1f}%)"
     )
+    logger.info(f"  Final columns ({len(aligned.columns)}): {list(aligned.columns)}")
 
     if save:
         out_path = root / config["paths"]["data_processed"] / f"{coin_name}_aligned.csv"

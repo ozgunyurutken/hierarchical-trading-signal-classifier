@@ -1,6 +1,9 @@
 """
 Price data collection from yfinance.
 Downloads OHLCV data for BTC-USD and ETH-USD.
+
+Each coin has its own start date configured in config.yaml:
+  data.symbols.<SYMBOL>.start_date
 """
 
 import pandas as pd
@@ -26,7 +29,7 @@ def download_price_data(
     symbol : str
         Ticker symbol (e.g., "BTC-USD", "ETH-USD").
     start_date : str, optional
-        Start date in YYYY-MM-DD format. Defaults to config value.
+        Start date in YYYY-MM-DD format. Defaults to per-coin config value.
     end_date : str, optional
         End date in YYYY-MM-DD format. Defaults to config value.
 
@@ -36,7 +39,14 @@ def download_price_data(
         OHLCV DataFrame with DatetimeIndex.
     """
     config = cfg()
-    start = start_date or config["data"]["start_date"]
+
+    # Per-coin start date from config (symbols is now a dict)
+    if start_date is None:
+        symbol_cfg = config["data"]["symbols"].get(symbol, {})
+        start = symbol_cfg.get("start_date", "2014-01-01")
+    else:
+        start = start_date
+
     end = end_date or config["data"]["end_date"]
 
     logger.info(f"Downloading {symbol} from {start} to {end}")
@@ -66,6 +76,7 @@ def download_price_data(
 def collect_all_prices(save: bool = True) -> dict[str, pd.DataFrame]:
     """
     Download price data for all configured symbols.
+    Each symbol reads its own start_date from config.yaml.
 
     Returns
     -------
@@ -76,6 +87,7 @@ def collect_all_prices(save: bool = True) -> dict[str, pd.DataFrame]:
     root = get_project_root()
     results = {}
 
+    # config["data"]["symbols"] is now a dict: {"BTC-USD": {"start_date": ...}, ...}
     for symbol in config["data"]["symbols"]:
         df = download_price_data(symbol)
         name = symbol.split("-")[0].lower()  # "BTC-USD" -> "btc"
