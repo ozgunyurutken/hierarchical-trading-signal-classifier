@@ -1,0 +1,127 @@
+# ============================================
+# Crypto Signal Classifier - Configuration
+# ============================================
+
+# --- Project Paths ---
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  data_labels: "data/labels"
+  models: "app/models"
+  reports: "reports"
+
+# --- Data Collection ---
+data:
+  symbols:
+    - "BTC-USD"
+    - "ETH-USD"
+  start_date: "2021-01-01"
+  end_date: "2025-12-31"
+
+  macro_monthly:
+    FEDFUNDS: "Federal Funds Rate"
+    CPIAUCSL: "CPI All Urban Consumers"
+    UNRATE: "Unemployment Rate"
+
+  macro_daily:
+    "^GSPC": "S&P 500"
+    "GC=F": "Gold Futures"
+    "DX-Y.NYB": "DXY Dollar Index"
+    "^VIX": "VIX Volatility"
+
+# --- Feature Engineering ---
+features:
+  trend_indicators:  # Stage 1 candidates
+    sma_periods: [20, 50, 200]
+    ema_periods: [12, 26]
+    adx_period: 14
+    use_parabolic_sar: true
+
+  oscillator_indicators:  # Stage 3 candidates
+    rsi_period: 14
+    stochastic_k_period: 14
+    stochastic_d_period: 3
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    williams_r_period: 14
+    cci_period: 20
+    roc_period: 10
+
+  volatility_indicators:
+    bb_period: 20
+    bb_std: 2
+    atr_period: 14
+    hist_vol_period: 20
+
+  volume_indicators:
+    volume_sma_period: 20
+
+  macro_transformations:
+    rolling_windows: [20, 50, 100]
+
+  selection:
+    correlation_threshold: 0.95
+    top_k_per_stage: 15
+
+# --- Label Generation ---
+labels:
+  trend:
+    sma_short: 20
+    sma_long: 50
+    min_persistence_days: 3
+
+  regime:
+    n_clusters: 3
+    cluster_range: [2, 3, 4, 5, 6]
+    methods: ["kmeans", "gmm", "hmm"]
+
+  signal:
+    forward_return_days: 5
+    fixed_threshold: 0.01
+    adaptive_constant: 0.5
+    adaptive_rolling_window: 20
+
+# --- Model Training ---
+training:
+  test_size: 0.15  # Last 15% chronological
+  min_train_window_months: 6
+  walk_forward_step_months: 1
+  n_oof_folds: 5
+  random_state: 42
+
+  classifiers:
+    xgboost:
+      n_estimators: [100, 300, 500]
+      max_depth: [3, 5, 7]
+      learning_rate: [0.01, 0.05, 0.1]
+      subsample: [0.7, 0.8, 1.0]
+
+    lightgbm:
+      n_estimators: [100, 300, 500]
+      num_leaves: [15, 31, 63]
+      learning_rate: [0.01, 0.05, 0.1]
+
+    random_forest:
+      n_estimators: [100, 300, 500]
+      max_depth: [5, 10, 20, null]
+      min_samples_leaf: [1, 5, 10]
+
+    mlp:
+      hidden_layers: [[64, 32], [128, 64], [128, 64, 32]]
+      learning_rate: [0.001, 0.0005]
+      batch_size: [32, 64]
+      patience: 10
+      max_epochs: 200
+
+# --- Backtesting ---
+backtesting:
+  transaction_fee: 0.001    # 0.1%
+  slippage: 0.0005          # 0.05%
+  initial_capital: 10000
+  position_type: "long_only"  # or "long_short"
+
+# --- API ---
+api:
+  host: "0.0.0.0"
+  port: 8000

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Signal Classifier</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Crypto Signal Classifier</h1>
+            <p class="subtitle">Three-Stage Hierarchical ML Pipeline for Trading Signals</p>
+        </header>
+
+        <main>
+            <!-- Prediction Section -->
+            <section class="card">
+                <h2>Get Prediction</h2>
+                <div class="input-group">
+                    <label for="symbol-select">Select Cryptocurrency:</label>
+                    <select id="symbol-select">
+                        <option value="BTC">Bitcoin (BTC)</option>
+                        <option value="ETH">Ethereum (ETH)</option>
+                    </select>
+                    <button id="predict-btn" onclick="getPrediction()">Get Prediction</button>
+                </div>
+            </section>
+
+            <!-- CSV Upload Section -->
+            <section class="card">
+                <h2>Upload OHLCV Data</h2>
+                <p class="hint">Upload a CSV file with columns: Date, Open, High, Low, Close, Volume</p>
+                <div class="input-group">
+                    <input type="file" id="csv-file" accept=".csv">
+                    <button onclick="predictFromCSV()">Predict from CSV</button>
+                </div>
+            </section>
+
+            <!-- Result Section -->
+            <section id="result-section" class="card hidden">
+                <h2>Prediction Result</h2>
+
+                <div class="signal-display">
+                    <div id="signal-badge" class="signal-badge">
+                        <span id="signal-text">--</span>
+                    </div>
+                    <div class="confidence-container">
+                        <label>Confidence:</label>
+                        <div class="progress-bar">
+                            <div id="confidence-bar" class="progress-fill"></div>
+                        </div>
+                        <span id="confidence-value">0%</span>
+                    </div>
+                </div>
+
+                <!-- Stage Breakdown -->
+                <div class="stage-breakdown">
+                    <div class="stage-card">
+                        <h3>Stage 1: Trend</h3>
+                        <div id="trend-probs" class="prob-bars"></div>
+                    </div>
+                    <div class="stage-card">
+                        <h3>Stage 2: Macro Regime</h3>
+                        <div id="regime-probs" class="prob-bars"></div>
+                    </div>
+                    <div class="stage-card">
+                        <h3>Stage 3: Signal</h3>
+                        <div id="signal-probs" class="prob-bars"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section id="error-section" class="card hidden error-card">
+                <h2>Error</h2>
+                <p id="error-message"></p>
+            </section>
+
+            <!-- Loading -->
+            <div id="loading" class="hidden">
+                <div class="spinner"></div>
+                <p>Computing prediction...</p>
+            </div>
+        </main>
+
+        <footer>
+            <p>BBL514E Pattern Recognition Term Project | 2026</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
