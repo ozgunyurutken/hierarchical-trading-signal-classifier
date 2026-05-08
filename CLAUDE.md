@@ -16,6 +16,10 @@ Three-Stage Hierarchical ML Framework for Cryptocurrency Trading Signal Classifi
 - **Notebooks for user interaction.** Data collection, label generation, and model training phases MUST produce notebook outputs for the user to manually review and approve.
 - **Show results first, then wait.** After completing a step, present a brief summary/interpretation, then wait for the user to review and give feedback.
 - **2-month project timeline.** No rushing. Quality over speed.
+- **Report-writing gate (TWO required signals).** Final report yazımına başlamadan önce her ikisinin de gerçekleşmiş olması ŞART:
+  1. **Kullanıcının açık onayı** — "içime sindi", "rapor yazabiliriz" tarzı net bir karar. "Sonuç iyi görünüyor"-tipi geçişken ifadeler YETMEZ.
+  2. **Coursework requirements check (Claude tarafı)** — proje proposal'ında / ödev gereksinimlerinde listelenen TÜM isterlerin (data pipeline, three-stage architecture, ablation comparisons, walk-forward CV, soft fusion, FastAPI demo, BTC+ETH, vs.) karşılandığından eminim.
+  - İki şart aynı anda sağlanmadıkça rapor yazımına geçilmez. Kullanıcı kararsızsa devam et, daha fazla deney/ölçüm öner. Coursework ister'i eksikse kullanıcı "yaz" dese bile önce eksiği tamamla, sonra yaz. Asla "hadi rapora başlayalım, kalan iş süreçte tamamlanır" yaklaşımı yok.
 
 ### Code Rules
 - All source code lives in `src/` with proper module structure.
