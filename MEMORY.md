@@ -1,9 +1,9 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** FAZ 6 (Web/Docker) — MVP TAMAM, Docker build kullanıcı tarafından yapılacak
-**Last Updated:** 2026-05-07 (akşam)
-**Days to deadline:** 3 (Final Report 10 Mayıs 2026)
+**Active Phase:** FAZ 7 — Rapor & Sunum (iter 3 data-quality audit tamam)
+**Last Updated:** 2026-05-08 (öğle, v3 retrain push edildi: commit 41a4164)
+**Days to deadline:** 2 (Final Report 10 Mayıs 2026)
 
 ## Progress Tracker
 
@@ -151,6 +151,103 @@
 ### Arşiv
 MVP/v1 görselleri `old_results/` altına taşındı (proposal/, final/ klasörleri korundu). 13 PNG: trend_labels, signal_labels, k_validation, regime_clusters, stage1/3 confusion matrices, decision_boundary_pca, final_confusion_matrices, final_roc_curves, backtest_equity/drawdowns, feature_correlations/distributions.
 
+## Iter 3 — Data Quality Audit + v3 Retrain (2026-05-08)
+
+### Tetikleyici
+Raw data visuals (`reports/raw_data_visuals/`) review sırasında US2Y plot'unun **negatif değerler ve %10K range** gösterdiği fark edildi → debug → **ZT=F futures kontratı price (≈108-110) bond yield olarak kullanılmış.** 2-Year US Treasury yield aslında %0–6 aralığında olmalı.
+
+### Kök neden
+- `config.yaml > macro_yields > "ZT=F": "US2Y"` — yfinance ZT=F = 2-Year T-Note **futures fiyatı**, **yield değil**.
+- Türev `Yield_Curve_10Y_2Y = US10Y − US2Y` ≈ `4 − 108` ≈ **-104** sabit gürültü oldu (informationless).
+- Etki kapsamı:
+  - Stage 3 v2 input feature seti **yield curve içermiyor** (sadece osc + vol + volume + trend_following + s1_oof + s2_oof) → tree-based modeller direkt etkilenmedi.
+  - **AMA** Stage 2 GMM cluster'ı 8 macro feature kullanıyor ve bunlardan biri `macro_Yield_Curve_10Y_2Y` (1/8 ≈ %12.5) → cluster posterior bug'lı feature ile fit edildi → Stage 3'e feature olarak giren `regime_prob_0/1/2` çarpık.
+
+### Düzeltme
+1. **Veri kaynağı:** ZT=F → FRED DGS2 (daily 2-year constant-maturity yield, gerçek %)
+2. **Kullanılmayan kolonlar drop:** US5Y, US3M, US30Y (config'te vardı, hiçbir feature/label/model bunları kullanmıyordu — gereksiz disk + confusion)
+3. **Aligned patched:** `scripts/patch_aligned_fred_us2y.py` (in-place, backup ile)
+4. **Macro features regen:** `compute_macro_features` 136 feature, yield curve artık `-1.08 → +2.04` (median +0.51, son tarih +0.67) — klasik recession indicator olarak meaningful.
+5. **Stage 2 OOF posterior regen:** `scripts/rerun_v3_stage2_after_us2y_fix.py` (eski vs yeni karşılaştırma dahil)
+6. **Stage 3 retrain:** `scripts/rerun_v3_stage3_retrain.py` — 7 model Optuna walk-forward (LDA 8, MLP 6, XGB/LGBM/RF 8 trial)
+
+### Stage 2 cluster shift (eski v2 vs yeni v3 GMM posterior)
+- **ARI (Adjusted Rand Index):** 0.14 (≈ rastgele ilişki)
+- **Hard-label agreement:** %49 (eski cluster ID'leri yeni ile sadece yarı yarıya örtüşüyor)
+- **Soft posterior L2 distance:** mean 0.72, max 1.41 (0–√2 aralığında, neredeyse maximum)
+- **Sonuç:** Cluster partitioning baştan değişti → Stage 3 retrain mecburi (training-serving skew olmamalı)
+
+### Final v3 Sonuçları (BTC, test set 587 gün)
+
+| Model | WF F1 | Test Acc | Test F1 | MCC | Return | Sharpe | MaxDD | Trades | Win % |
+|-------|------:|---------:|--------:|----:|-------:|-------:|------:|-------:|------:|
+| LDA          | -     | 0.349 | 0.194 | 0.032 |  +9.8% | 0.60 |  -1.9% |  1 | 100% |
+| MLP          | -     | 0.384 | 0.312 | 0.059 | +44.7% | 0.95 | -15.5% | 21 | 71.4% |
+| **XGB**      | -     | 0.372 | 0.236 | 0.077 | **+50.5%** | **1.39** | -11.4% | 12 | 75.0% |
+| LGBM         | -     | 0.376 | 0.250 | 0.065 | +28.5% | 0.85 | -15.2% | 17 | 64.7% |
+| **RF**       | -     | 0.384 | 0.248 | 0.109 | +47.7% | 1.29 | -11.4% | 10 | 70.0% |
+| ZZ-XGB       | 0.276 | 0.380 | 0.254 | 0.086 | +35.8% | 1.08 | -12.6% | 18 | 66.7% |
+| **ZZ-MLP**   | 0.255 | **0.405** | **0.339** | **0.138** | +25.9% | 0.85 | -17.6% | 17 | 52.9% |
+| **Buy & Hold** | -   | -     | -     | -     | **+61.6%** | 0.83 | -32.1% |  1 | -    |
+
+### v2 → v3 karşılaştırması (head-to-head)
+
+| Model     | v2 Return | v2 Sharpe | v3 Return | v3 Sharpe | Δ Sharpe |
+|-----------|----------:|----------:|----------:|----------:|---------:|
+| LDA       | 0.0%      | 0.00      | +9.8%     | 0.60      | +0.60    |
+| MLP       | +8.5%     | 0.30      | +44.7%    | 0.95      | **+0.65 (3.2x)** |
+| **XGB**   | +25.3%    | 0.88      | +50.5%    | **1.39**  | **+0.51 (1.6x)** |
+| LGBM      | +18.1%    | 0.56      | +28.5%    | 0.85      | +0.29    |
+| **RF**    | +19.0%    | 0.74      | +47.7%    | **1.29**  | **+0.55 (1.7x)** |
+| ZZ-XGB    | +18.4%    | 0.60      | +35.8%    | 1.08      | +0.48    |
+| **ZZ-MLP**| **+53.9%**| **1.13**  | +25.9%    | 0.85      | **−0.28 (eski "star" düştü)** |
+
+### Akademik bulgular (rapora yansıyacak)
+
+**1. ZZ-MLP'nin v2'deki "star" performansı (+53.9%, Sharpe 1.13) kısmen spurious:**
+Bug'lı `Yield_Curve_10Y_2Y` (sabit -104 gürültü) MLP'nin GMM cluster posterior'ı üzerinden öğrendiği yapıya gizli bir "regime fingerprint" eklemiş — yüksek-kapasiteli MLP bu sahte sinyali ezberlemiş. Bug düzeltilince Stage 2 cluster gerçek bilgi taşımaya başladı, ZZ-MLP'nin avantajı (+28.0% return, −0.28 Sharpe) eridi.
+
+**2. Tree-based modeller (XGB +50.5% Sharpe 1.39, RF +47.7% Sharpe 1.29) v3'te öne çıktı:**
+Daha temiz Stage 2 cluster sinyali → tree split'lerinin selective trade timing'i (XGB 12 trade, RF 10 trade vs MLP 21 trade) daha verimli. **Sharpe XGB 1.39 vs B&H 0.83 (%66 üstü)**, MaxDD -11.4% vs B&H -32.1% (1/3'ü).
+
+**3. Sınıflandırma vs ekonomik metrik divergence devam ediyor:**
+- En iyi MCC/F1: **ZZ-MLP** (0.138 / 0.339)
+- En iyi Sharpe: **XGB** (1.39)
+- En iyi return: **XGB** (+50.5%)
+- B&H absolute return'üne yetişen yok (+61.6% — yeni test seti DGS2 warm-up yüzünden 30 gün daha kısa, B&H rakamı v2'den farklı)
+
+**4. Data quality audit'in model selection'ı tamamen değiştirdiği örnek:**
+"Best model" kararı v2'de ZZ-MLP idi → v3'te XGB-SMA. Bu, makine öğrenmesi pipeline'larında **veri doğrulama (sanity check on raw inputs) modelden önce gelmeli** mesajı için somut bir vaka. Raporda "lessons learned" / "limitations" bölümünde anlatılabilir.
+
+### v3 yeni / güncellenen artifact'lar
+- `data/processed/btc_aligned.csv` (3,961 sat — DGS2 fix), `eth_aligned.csv` (2,857 sat)
+- `data/processed/btc_features_macro.csv` (136 feat, fixed yield curve)
+- `data/labels/btc_oof_regime_posterior.csv` (3,247 sat — yeni GMM)
+- `data/labels/btc_test_signals_v2*.csv` (3 dosya, v3 predictions ile override)
+- `data/labels/btc_stage3_v2*_summary.csv` (3 dosya, v3 metrikleri)
+- `data/labels/btc_backtest_v2*_summary.csv` (3 dosya, v3 backtest)
+- `data/labels/final_iter2_summary_table.csv` (rapor tablosu, v3 sayıları)
+- `reports/raw_data_visuals/us2y.png` (yeni, gerçek yield)
+- `reports/raw_data_visuals/data_summary.csv` (US2Y stats fix)
+- 7 PNG yenisi `reports/iter2_*.png` (cm/roc/pred_dist/equity/metric_comparison/summary_table/zigzag_vs_sma)
+- Backup'lar: `*.backup_20260508_*.csv` (gitignore'da, lokalde duruyor — geri dönüş için)
+
+### v3 yeni script'ler
+- `scripts/patch_aligned_fred_us2y.py` — in-place ZT=F → DGS2 patch + US5Y/3M/30Y drop
+- `scripts/rerun_v3_stage2_after_us2y_fix.py` — Stage 2 OOF regen + ARI karşılaştırma
+- `scripts/rerun_v3_stage3_retrain.py` — 7 model Optuna walk-forward retrain + backtest + summary
+- `scripts/regenerate_all_v2_visuals.py` — date-intersection bug fix (DGS2 warm-up sonrası label tarihleri)
+
+### Config değişikliği
+- `config.yaml > data > macro_yields`:
+  - Eski: `{"^TNX": "US10Y", "ZT=F": "US2Y"}` (BUG)
+  - Yeni: `{"^TNX": "US10Y"}` + ayrı `macro_yields_fred: {"DGS2": "US2Y"}` (FRED API key gerekli)
+
+### Bilinen kalan riskler / TODO (rapor öncesi)
+- Notebook 04 ve 07 hâlâ v2 sonuçlarını gösteriyor — sunum öncesi v3 CSV'leriyle re-run lazım
+- `app/models/stage3_*_v2.joblib` (joblib model artifact'leri) v3 retrain ile **güncellenmedi** — `rerun_v3_stage3_retrain.py` script'i `save_model=False` ile çalıştı. Demo için modeller hâlâ v2 (eski) input dağılımına fit, ama input feature'ları (s2_oof) artık v3 → **demo'da training-serving skew var.** Düzeltme: aynı script'i `save_model=True` ile bir kez daha çalıştır + `pipeline_lda/` `pipeline_mlp/` artifact'lerini de yeniden export et.
+- `final_iter2_summary_table.csv` rapor tablosunun text içine kopyalanması gerekiyor.
+
 ### Kod değişiklikleri (iter 2)
 - `src/features/technical_indicators.py` — `compute_trend_following_features()` (11 feat)
 - `src/features/macro_features.py` — `compute_derived_spreads()` (4 spread + zscore)
@@ -264,18 +361,19 @@ MVP/v1 görselleri `old_results/` altına taşındı (proposal/, final/ klasörl
 | BTC-USD | 4,123 | 2014-09-17 → 2025-12-30 | ✅ NaN yok |
 | ETH-USD | 2,974 | 2017-11-09 → 2025-12-30 | ✅ NaN yok |
 
-### Hizalanmış Veri
-| Veri | Satır | Sütun | Tarih Aralığı |
-|------|-------|-------|---------------|
-| **BTC Aligned** | ~4,111 | 17 | 2014-09-17 → 2025-12-30 |
-| **ETH Aligned** | ~2,967 | 17 | 2017-11-09 → 2025-12-30 |
+### Hizalanmış Veri (v3 — DGS2 fix sonrası)
+| Veri | Satır | Sütun | Tarih Aralığı | Notlar |
+|------|-------|-------|---------------|--------|
+| **BTC Aligned** | 3,961 | 17 | 2014-09-17 → 2025-12-30 | v2'de 4,111 → DGS2 warm-up nedeniyle 150 satır drop |
+| **ETH Aligned** | 2,857 | 17 | 2017-11-09 → 2025-12-30 | v2'de 2,967 → 110 satır drop |
 
-### Aligned Dataset Columns (17)
+### Aligned Dataset Columns (17, v3)
 - **OHLCV (5):** Open, High, Low, Close, Volume
 - **Risk (3):** SP500, VIX, DXY
 - **Commodities (3):** Gold, Silver, Oil_WTI
-- **Yields (2):** US10Y, US2Y
+- **Yields (2):** US10Y (yfinance ^TNX), **US2Y (FRED DGS2)** — v2'de yanlışlıkla yfinance ZT=F (futures fiyatı, yield değil) kullanılıyordu
 - **Credit (4):** HY_Bond, IG_Bond, Treasury20Y, TIPS
+- **Kaldırıldı (v2'de vardı, hiçbir yerde kullanılmadığı için silindi):** US5Y, US3M, US30Y
 
 ## Open Questions
 - [ ] BTC test period start date kesinlikle? (~2024-04 civarı, %15 son chronological)
