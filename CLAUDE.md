@@ -20,6 +20,7 @@ Three-Stage Hierarchical ML Framework for Cryptocurrency Trading Signal Classifi
   1. **Kullanıcının açık onayı** — "içime sindi", "rapor yazabiliriz" tarzı net bir karar. "Sonuç iyi görünüyor"-tipi geçişken ifadeler YETMEZ.
   2. **Coursework requirements check (Claude tarafı)** — proje proposal'ında / ödev gereksinimlerinde listelenen TÜM isterlerin (data pipeline, three-stage architecture, ablation comparisons, walk-forward CV, soft fusion, FastAPI demo, BTC+ETH, vs.) karşılandığından eminim.
   - İki şart aynı anda sağlanmadıkça rapor yazımına geçilmez. Kullanıcı kararsızsa devam et, daha fazla deney/ölçüm öner. Coursework ister'i eksikse kullanıcı "yaz" dese bile önce eksiği tamamla, sonra yaz. Asla "hadi rapora başlayalım, kalan iş süreçte tamamlanır" yaklaşımı yok.
+- **Report scope rule (paper odaklılığı).** Final paper SADECE en son başarılı sürüm (V3 veya hangisi onaylanırsa) hakkında yazılır. Geçmiş başarısız/öncül iterasyonlar (v1, v2/ablation, v2/bigger-dataset, v2/feature-selection B2, GMM stickiness, vb.) **paper'da bahsedilmez** — bunlar iç dokümantasyon (MEMORY, CHECKPOINT, V3_PLAN) ve Git history'de fallback referansı olarak kalır. IEEE 4-6 sayfa scope'unda her tarihçe detayı paper'ı uzatır ve okuyucuyu yorar; sadece final tasarım + ablation + sonuçlar yer alır. Geçmiş denemeler en fazla "preliminary work" diye tek bir cümle ile geçer, eğer gerekiyorsa.
 
 ### Code Rules
 - All source code lives in `src/` with proper module structure.
