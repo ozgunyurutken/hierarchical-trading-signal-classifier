@@ -28,9 +28,11 @@ import numpy as np
 import pandas as pd
 from matplotlib.patches import Patch
 
-plt.rcParams.update({"figure.dpi": 110, "font.size": 9, "axes.grid": True,
+plt.rcParams.update({"figure.dpi": 160, "font.size": 11, "axes.grid": True,
                      "grid.alpha": 0.25, "axes.spines.top": False,
-                     "axes.spines.right": False})
+                     "axes.spines.right": False,
+                     "xtick.labelsize": 11, "ytick.labelsize": 10,
+                     "axes.labelsize": 11, "axes.titlesize": 12.5})
 
 # Renk şeması (semantic, cluster idx'e değil!)
 COLORS = {"Calm": "#a8dca8", "Transition": "#f8d6a4", "Stress": "#f7b3b3"}
@@ -112,7 +114,7 @@ def main() -> None:
     p_cols = list(s2.columns)
     name_to_col = {idx_to_name[int(c.split("_")[-1])]: c for c in p_cols}
 
-    fig, axes = plt.subplots(3, 1, figsize=(14, 11), sharex=True,
+    fig, axes = plt.subplots(3, 1, figsize=(20, 16), sharex=True,
                              gridspec_kw={"height_ratios": [1.5, 1.5, 1]})
 
     # ---- Panel 1: BTC log + cluster shading ----
@@ -155,9 +157,11 @@ def main() -> None:
                  fontsize=10, fontweight="bold")
     ax.legend(loc="upper left", fontsize=8, ncol=3)
 
-    axes[-1].xaxis.set_major_locator(mdates.YearLocator())
-    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-    axes[-1].set_xlabel("Tarih")
+    axes[-1].xaxis.set_major_locator(mdates.MonthLocator(bymonth=[1, 7]))
+    axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+    axes[-1].xaxis.set_minor_locator(mdates.MonthLocator())
+    plt.setp(axes[-1].xaxis.get_majorticklabels(), rotation=45, ha="right", fontsize=11)
+    axes[-1].set_xlabel("Tarih", fontsize=12)
 
     # Stat box on top of figure
     stat_lines = [
