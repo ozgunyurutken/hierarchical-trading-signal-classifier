@@ -1,0 +1,10 @@
+,strategy,total_return,sharpe,max_dd,n_trades,win_rate
+0,v2-bigger LDA,0.0,0.0,0.0,0,0.0
+1,v2-bigger MLP,0.1381,0.4046,-0.2018,34,0.5588
+2,v2-bigger XGBOOST,0.2675,0.6915,-0.1862,25,0.6
+3,v2-bigger LIGHTGBM,0.1256,0.3952,-0.1874,25,0.64
+4,v2-bigger RANDOM_FOREST,-0.0226,0.0214,-0.1948,19,0.4737
+5,v2-bigger ZZ XGBOOST,0.1355,0.4237,-0.1878,17,0.5882
+6,v2-bigger ZZ MLP,-0.251,-0.7679,-0.3319,23,0.3478
+7,Buy & Hold (A+B),0.3177,0.5276,-0.3215,1,
+8,Buy & Hold (ZZ),0.3177,0.5276,-0.3215,1,
