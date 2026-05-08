@@ -1,10 +1,15 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** FAZ 7 — Rapor & Sunum (iter 4 monthly FRED + retrain tamam)
-**Last Updated:** 2026-05-08 (öğleden sonra, v4 retrain push edildi: commit 1850e87)
+**Active Phase:** FAZ 7 — Rapor & Sunum (V3 restart literatür taraması safhası)
+**Last Updated:** 2026-05-08 (akşam — B2 ZZ-MLP 1.68 Sharpe; V3 plan onaylı; lit review başlıyor)
 **Days to deadline:** 2 (Final Report 10 Mayıs 2026)
-**Checkpoint:** `v1.0-iter4-final` tag at commit `ab408d5` (rapor öncesi dondurulmuş referans, push edildi)
+**Aktif Checkpoint:** `docs/CHECKPOINT_2026-05-08.md` — anlık tüm branch durumu
+
+**Referans noktaları:**
+- `v1.0-iter4-final` tag (`ab408d5`) — Sharpe 1.35 fallback
+- `v2/feature-selection` branch — Sharpe **1.68** (ZZ-MLP, B2 subset) primary headline
+- `v3-rule-based-regime` branch (`042fafd`) — WIP, lit review sonrası başlayacak
 
 ## Progress Tracker
 
@@ -626,3 +631,102 @@ Ablation negatif bulgu **ham haliyle alınmamalı** — kök sebep büyük ihtim
 ### Şimdilik askıda kalan
 - Notebook 04+07+08 refresh (Konu C v2/notebook-refresh) — feature selection sonrası yapılacak
 - ETH pipeline (Konu D v2/eth-pipeline) — opsiyonel, deadline buffer'a göre
+
+## v2/feature-selection — KAZANAN SONUÇ (2026-05-08, akşam)
+
+Branch: `v2/feature-selection` HEAD `bf2aae7` (diğer commit'ler dahil v2/feature-selection branch'inde tutulur).
+
+### B2 + ZZ-MLP = Proje rekoru
+
+| Metrik | Değer |
+|---|---|
+| Sharpe Ratio | **1.68** |
+| Total Return | **+89.5%** |
+| Win Rate | **72.2%** |
+| MaxDD | -11.9% |
+| Test Acc | 0.411 |
+| Test F1 | 0.331 |
+| MCC | 0.122 |
+
+**Buy & Hold benchmark karşılaştırması:**
+- B&H Sharpe 0.75 / Return +47.6% / MaxDD -32.1%
+- ZZ-MLP **Sharpe 2.24x B&H, Return +41.9pp B&H'ı geçti**, MaxDD 1/3'üne indi
+
+### B2 + 7 model toplu (462 gün test, 24 tech feat + Stage 1 ZigZag OOF + Stage 2 GMM OOF)
+
+| Model | Sharpe | Return | Win% | MCC |
+|---|---:|---:|---:|---:|
+| LDA | -0.78 | -0.8% | 50.0% | -0.004 |
+| MLP | 0.76 | +27.8% | 61.1% | 0.097 |
+| **XGB** | **1.58** | +56.7% | 87.5% | 0.115 |
+| LGBM | 0.61 | +13.7% | 61.5% | 0.076 |
+| RF | 1.07 | +30.0% | 80.0% | 0.100 |
+| ZZ-XGB | 1.11 | +33.9% | 75.0% | 0.096 |
+| **ZZ-MLP** | **1.68** ★★ | **+89.5%** ★★ | 72.2% | 0.122 |
+
+5/7 model B&H Sharpe (0.75) üstünde.
+
+### Ablation 4×4 Grid Sharpe (XGBoost)
+
+|  | A1 flat | A2 trend | A3 macro | A4 full |
+|---|---:|---:|---:|---:|
+| v1 (29 feat) | **1.43** | 1.10 | 1.16 | 1.35 |
+| B1 (15 osc/vol) | 0.50 | 1.10 | 1.25 | 0.97 |
+| **B2 (24 −5 long-trend)** | 1.17 | 0.85 | 1.18 | **1.58** ★ |
+| B3 (MI top-15) | 1.26 | **1.50** | 0.99 | 1.04 |
+
+**Ana methodology bulgusu:** v1 ablation 29 feat full set ile yapıldığında A1 flat ≥ A4 full (hiyerarşi kazanç sağlamıyor görünüyor). 5 long-trend feature (`log_ret_50d/100d`, `above_sma_200`, `adx_value`, `sharpe_proxy_20d`) çıkarıldığında (B2 subset) hiyerarşi gerçek katma değer veriyor — Sharpe A4 1.58 > A1 1.17 (+0.41 fark), ZZ-MLP de 0.95→1.68 (+0.73 sıçrama). **Feature redundancy hiyerarşinin değerini gizlemişti.**
+
+### Bilinen sorun: GMM Stickiness (rapor için kritik)
+
+Stage 2 GMM unsupervised cluster aşırı **overconfident**:
+- 2024 H2: P(Stress) ortalama **0.994** (median 1.000)
+- 2025 boyunca: P(Stress) ortalama **0.964**, 12 ay'ın 11'i %100 Stress
+- Argmax confidence 0.999 — soft posterior pratikte hard label gibi davranıyor
+
+VIX gerçeği:
+- 2024-2025 ortalama VIX = 17.22 (2018-2019 baseline 15.92'den sadece +1.3 fark)
+- Yani gerçekten "Stress" denecek seviye değil
+
+Sebep tahmin: 2024-2025'te FEDFUNDS (4.5-5.5%, train mostly 0-2.5%), real_interest_rate (pozitif, train negatif), UNRATE level seviyeleri **out-of-distribution** sample. GMM full-train fit, scaler stale → test günleri en yakın cluster'a yapışıyor.
+
+**Paradoks:** Stage 3 modelleri bu "yanlış" Stress sinyalini **defansif filtre** olarak kullanıp Sharpe 1.68'e ulaşıyor. Yani GMM görsel olarak yanıltıcı ama functional olarak iş yapıyor.
+
+### Eklenen dokümantasyon (v2/feature-selection branch'te)
+- `docs/GLOSSARY.md` — tüm isimlendirmeler tek doküman (versions, phases, ablation, models, labels, branches)
+- `docs/V3_PLAN.md` — bu sürümün adresleyebileceği bekleyen sorunlar + V3 restart planı
+
+## V3 Restart Kararı (2026-05-08, akşam, posterden ilham)
+
+### Tetik: Kullanıcının önceki başarılı projesi
+"Machine Learning-Based Market Regime Prediction and Dynamic Weight Optimization for Multi-Asset Portfolios" posteri. Sharpe 1.41 (Dynamic MVO vs B&H 0.88), XGBoost rejim tahmininde %76.7 accuracy, %85.7 early warning capacity.
+
+**Posterdeki tasarım kararları, bizim kademeli adapte edeceğimiz:**
+1. **Rule-based regime** (VIX > 35, return < -10%, vol > 35%) — GMM unsupervised yerine
+2. **Stage 1 = early warning ML** — rule-based regime'i 1-3 ay (bizde 5-20 gün) önceden tahmin
+3. **Adaptive position sizing** (Dynamic MVO λ=1/2/5) — bizim long-only Buy/Sell yerine
+4. **44 feature** (multi-period momentum, drawdown, recovery, VIX dynamics)
+5. **2 ana plot** (regime detection + portfolio comparison) — sade poster style
+
+### V3 branch yapısı
+```
+claude/review-checkpoint-results-2hh1j  ← ana (CHECKPOINT_2026-05-08 burada)
+├── v1.0-iter4-final  (tag, fallback referansı, Sharpe 1.35)
+├── v2/feature-selection  (B2 ZZ-MLP Sharpe 1.68, fallback referansı)
+└── v3-rule-based-regime  ← yeni, henüz boş (`042fafd` WIP regime_rules.py only)
+```
+
+### V3 sonraki adımlar (BEKLEMEDE)
+
+Kullanıcı: "önce literatür taraması yapalım, problemleri nasıl ele almışlar, sağlam atıflar bulalım. Sonra implementation."
+
+**Literature review hedefleri (Research mode):**
+1. Hierarchical / multi-stage classifiers — soft fusion vs hard fusion
+2. Market regime detection — rule-based vs unsupervised (GMM, HMM)
+3. Feature redundancy in stacked models — bizim B2 bulgusu
+4. Walk-forward CV in financial time series
+5. Trading signal classification — Buy/Sell/Hold
+6. Adaptive position sizing — Dynamic MVO, Kelly, vol-targeting
+7. Class imbalance in finance ML — bizim CM Sell-bias
+
+Çıktı: `docs/LITERATURE_REVIEW.md` (15-25 atıflı).
