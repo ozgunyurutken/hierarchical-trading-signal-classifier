@@ -4,6 +4,7 @@
 **Active Phase:** FAZ 7 — Rapor & Sunum (iter 4 monthly FRED + retrain tamam)
 **Last Updated:** 2026-05-08 (öğleden sonra, v4 retrain push edildi: commit 1850e87)
 **Days to deadline:** 2 (Final Report 10 Mayıs 2026)
+**Checkpoint:** `v1.0-iter4-final` tag at commit `ab408d5` (rapor öncesi dondurulmuş referans, push edildi)
 
 ## Progress Tracker
 
@@ -468,3 +469,46 @@ Bu seçim akademik açıdan şunu sağlıyor: GMM artık **gerçek monetary poli
 
 ## Experiment Results
 _(FAZ 4-5'te doldurulacak)_
+
+## v1.0 Checkpoint — Rapor Öncesi Dondurulmuş Referans (2026-05-08)
+
+Iter 4 sonuçları `v1.0-iter4-final` annotated tag'ı ile mühürlendi (commit `ab408d5`, remote push edildi). Rapor yazımı bu tag'a referansla yapılacak. Buradan sonra v2 işlerine **paralel branch'lerde** geçilecek — `claude/review-checkpoint-results-2hh1j` ana branch'i bu noktada bitti.
+
+### v1 → v2 yol haritası (öncelik sırası)
+
+#### **A. Ablation Çalışması** (rapor için kritik eksiklik)
+- `src/models/pipeline.py` zaten 3 sınıf içeriyor: `FlatBaselinePipeline`, `TwoStagePipeline`, `ThreeStagePipeline` — yazılı ama hiç kullanılmadı.
+- `notebooks/08_ablation_study.ipynb` boş (2 cell, sadece başlık).
+- **Test edilecek 4 konfigürasyon:**
+  1. **Flat (1-stage):** sadece teknik features → signal classifier
+  2. **2-stage (Trend-only):** tech + s1 → signal (s2 yok)
+  3. **2-stage (Macro-only):** tech + s2 → signal (s1 yok)
+  4. **3-stage (Full v4):** tech + s1 + s2 → signal (mevcut)
+- En iyi modelde (XGB) çalıştır, Sharpe + MaxDD + Win% farkını ölç.
+- Hipotez: 1→2-stage arası belirgin sıçrama, 2→3-stage marjinal kazanç (ya da değil — sonuca göre tezi yeniden çerçeveleyebiliriz).
+- Branch: `v2/ablation`.
+
+#### **B. Veri Seti Genişletme** (yfinance dışı kaynak)
+- yfinance BTC-USD start = 2014-09-17 (kesin sınır).
+- **Alternatif kaynaklar:** CoinGecko API (2010-Apr → günümüz, free tier 10K req/month), CryptoCompare (2010 → günümüz), Bitstamp historical CSV (2011 → günümüz).
+- Hedef: 2010-07 → 2014-09 arası ~1500 ek gün → toplam 5500 gün, test seti 462 → ~825 gün.
+- Risk: erken Bitcoin verisi düşük likidite/wash trading var, label kalitesi düşebilir; ETL aşaması yeniden yazılması gerekiyor (yfinance vs CoinGecko field isimleri farklı).
+- Branch: `v2/bigger-dataset`.
+
+#### **C. Notebook Refresh** (sunum öncesi zorunlu)
+- `notebooks/04_label_generation.ipynb` — Stage 2 feature listesi 8 → 11.
+- `notebooks/07_evaluation.ipynb` — v4 CSV'leri ile re-run.
+- Bu, A ve B'den bağımsız, paralel yapılabilir.
+
+#### **D. ETH Modelini Çalıştır** (opsiyonel)
+- ETH aligned (2,857 sat × 22 kol) hazır, hiç model train edilmedi.
+- Aynı v4 pipeline'ını ETH için de koştur → BTC/ETH karşılaştırma tablosu rapora ek somut sayı.
+- Branch: `v2/eth-pipeline`.
+
+### v2 branch yapısı (paralel)
+- `v2/ablation` — Konu A
+- `v2/bigger-dataset` — Konu B
+- `v2/notebook-refresh` — Konu C
+- `v2/eth-pipeline` — Konu D (opsiyonel)
+
+İkisi paralel ilerlerken sonra entegrasyon: A ve B'den çıkan sonuçlar farklı veri kümeleri kullanır, dolayısıyla "B verisi üzerinde A ablation'ı" ek bir entegrasyon iterasyonu (v2.1) gerektirebilir. Final v2 sonuçları için `v3.0-final` tag'ı atılır.
