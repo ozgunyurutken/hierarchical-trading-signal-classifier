@@ -268,6 +268,10 @@ def plot_zigzag_vs_sma() -> None:
     fig, axes = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
     color_map = {"Uptrend": "#2ECC71", "Downtrend": "#E74C3C", "Sideways": "#95A5A6"}
     for ax, (name, lbl) in zip(axes, [("SMA crossover (MVP)", sma), ("Causal ZigZag (iter 2)", zz)]):
+        # Restrict to dates common to both label and aligned (DGS2 warm-up may have
+        # dropped 150 days from aligned that still exist in the older label CSV).
+        common = lbl.index.intersection(btc.index)
+        lbl = lbl.loc[common]
         ax.plot(btc.index, btc["Close"], color="black", linewidth=0.5, alpha=0.4)
         for cls, color in color_map.items():
             mask = lbl == cls
