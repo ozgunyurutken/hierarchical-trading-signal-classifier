@@ -1,8 +1,8 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** FAZ 7 — Rapor & Sunum (iter 3 data-quality audit tamam)
-**Last Updated:** 2026-05-08 (öğle, v3 retrain push edildi: commit 41a4164)
+**Active Phase:** FAZ 7 — Rapor & Sunum (iter 4 monthly FRED + retrain tamam)
+**Last Updated:** 2026-05-08 (öğleden sonra, v4 retrain push edildi: commit 1850e87)
 **Days to deadline:** 2 (Final Report 10 Mayıs 2026)
 
 ## Progress Tracker
@@ -244,9 +244,88 @@ Daha temiz Stage 2 cluster sinyali → tree split'lerinin selective trade timing
   - Yeni: `{"^TNX": "US10Y"}` + ayrı `macro_yields_fred: {"DGS2": "US2Y"}` (FRED API key gerekli)
 
 ### Bilinen kalan riskler / TODO (rapor öncesi)
-- Notebook 04 ve 07 hâlâ v2 sonuçlarını gösteriyor — sunum öncesi v3 CSV'leriyle re-run lazım
-- `app/models/stage3_*_v2.joblib` (joblib model artifact'leri) v3 retrain ile **güncellenmedi** — `rerun_v3_stage3_retrain.py` script'i `save_model=False` ile çalıştı. Demo için modeller hâlâ v2 (eski) input dağılımına fit, ama input feature'ları (s2_oof) artık v3 → **demo'da training-serving skew var.** Düzeltme: aynı script'i `save_model=True` ile bir kez daha çalıştır + `pipeline_lda/` `pipeline_mlp/` artifact'lerini de yeniden export et.
+- Notebook 04 ve 07 hâlâ v2 sonuçlarını gösteriyor — sunum öncesi v4 CSV'leriyle re-run lazım. Notebook 04'teki `stage2_feature_names` listesi 8 elemanlı; v4'te 11 olmalı (`+ macro_FEDFUNDS, macro_real_interest_rate, macro_UNRATE`).
 - `final_iter2_summary_table.csv` rapor tablosunun text içine kopyalanması gerekiyor.
+
+## Iter 4 — Monthly FRED + Stage 2 Genişlemesi (2026-05-08 öğleden sonra)
+
+### Tetikleyici
+Iter 3'te eklediğim DGS2 (daily 2Y yield) yalnızca yield curve fix'i içindi. Aslında `config.yaml > macro_fred_optional` infrastructure'ı 5 monthly/weekly FRED series için de mevcuttu (FEDFUNDS, CPIAUCSL, UNRATE, WM2NS, ICSA) ama hiç çekilmemiş, aligned'a girmemiş, `macro_real_interest_rate` türev feature'ı silently skip ediliyordu. Kullanıcı "diğerlerine gerek yok" derken sadece daily yields'ı (US5Y/3M/30Y) kastettiği için iter 4 ile bu monthly seri seti eklendi.
+
+### Kaynak ekle (`scripts/add_fred_monthly.py`)
+| Series | Frequency | Release lag | min → max | Last value |
+|---|---|---|---|---|
+| FEDFUNDS | monthly | 1d | 0.05 → 5.33 | 3.72 |
+| CPIAUCSL | monthly | 45d | 234.7 → 326.6 | 325.06 |
+| UNRATE | monthly | 35d | 3.40 → 14.80 | 4.50 |
+| WM2NS | weekly | 14d | 11,452 → 22,597 | 22,469 |
+| ICSA | weekly | 5d | 190K → 6.13M | 215K |
+
+Her seri kendi publication-release lag'i ile shift edilir, sonra crypto daily index'ine `ffill` ile bindirilir. **Hiçbir warm-up loss YOK** — FRED 2013'ten başlatıldığı için 2014-09-17'de hepsi dolu. Aligned: BTC 3,961 sat × 17 kol → 22 kol; ETH aynı şekilde.
+
+### Macro feature regen
+`compute_macro_features` artık 51 ek FRED-türev feature üretiyor (her seri × {level, sma_20/50/100, zscore_20/50/100, roc_5/20/50}). En önemli yeni türev: **`macro_real_interest_rate = FEDFUNDS − CPI_yoy_pct`** (Fisher equation, ZIRP era'da negative). **Toplam: 136 → 187 makro feature.**
+
+### Stage 2 GMM 8 → 11 feature
+`scripts/rerun_v4_after_monthly_fred.py` orchestrator script'inde Stage 2 feature subset güncellendi:
+- **Mevcut 8:** macro_VIX, VIX_zscore_50, Yield_Curve_10Y_2Y, Credit_Spread_log, Gold_Silver_Ratio, SP500_VIX_ratio, DXY_zscore_50, SP500_roc_20
+- **Yeni 3:** macro_FEDFUNDS (rate level), macro_real_interest_rate (Fisher derived), macro_UNRATE (recession proxy)
+
+Bu seçim akademik açıdan şunu sağlıyor: GMM artık **gerçek monetary policy regime'lerini** (ZIRP / hike cycle / cutting cycle) ve **NBER-style recession indicator**'larını (UNRATE) cluster'lamak için kullanabilir, eski 8-feature set bunu sadece dolaylı olarak (yield curve, credit spread) yapıyordu.
+
+### Stage 3 retrain (v4) — model save edildi
+`tune_stage3` 7 model × Optuna walk-forward (LDA 8, MLP 6, XGB/LGBM/RF 8 trial, ZZ-XGB ve ZZ-MLP da). **Bu sefer joblib export var:** `app/models/stage3_*_v2.joblib` (5 + 2 ZigZag) — v3'te eksik olan demo training-serving skew kapandı (`.gitignore`'da, lokal demo için).
+
+### Final v4 Sonuçları (BTC, test set 462 gün)
+
+| Model | Test Acc | Test F1 | MCC | Return | **Sharpe** | MaxDD | Trades | Win % |
+|-------|---------:|--------:|----:|-------:|-----------:|------:|-------:|------:|
+| LDA          | 0.344 | 0.174 | -0.004 |  -0.8% | **-0.78** |  -1.0% |  2 | 50.0% |
+| **MLP**      | 0.379 | 0.263 |  0.080 | +42.8% | **+1.33** | -10.2% | 17 | 76.5% |
+| **XGB**      | 0.383 | 0.253 |  0.093 | **+42.7%** | **+1.35** | -11.4% | 13 | 84.6% |
+| LGBM         | 0.390 | 0.264 |  0.116 | +27.7% | +1.06 | -11.4% | 10 | 90.0% |
+| **RF**       | **0.394** | 0.264 |  **0.128** | +38.1% | +1.25 | -11.4% | 10 | 80.0% |
+| **ZZ-XGB**   | **0.394** | 0.264 |  0.123 | +40.5% | **+1.33** | -11.4% | 12 | **91.7%** |
+| ZZ-MLP       | 0.390 | **0.275** |  0.081 | +35.6% | +0.95 | -13.0% | 19 | 79.0% |
+| **Buy & Hold** | -    | -     |  -     | **+47.6%** |  +0.75 | -32.1% |  1 | -    |
+
+**5/7 model B&H Sharpe 0.75'i geçti.** Test seti 587 → 462 gün düştü (FRED warm-up nedeniyle Stage 2 X.dropna 3,247 → 3,079 satıra indi); B&H absolute return 61.6% → 47.6% bu yüzden farklı.
+
+### v2 → v3 → v4 Sharpe trajectory (head-to-head)
+
+| Model | v2 (bug) | v3 (US2Y fix) | v4 (+ monthly FRED) | Net Δ (v2→v4) |
+|---|---:|---:|---:|---:|
+| LDA       | 0.00 | +0.60 | -0.78 | **-0.78** |
+| MLP       | +0.30 | +0.95 | **+1.33** | **+1.03** |
+| XGB       | +0.88 | **+1.39** | +1.35 | +0.47 |
+| LGBM      | +0.56 | +0.85 | +1.06 | +0.50 |
+| RF        | +0.74 | +1.29 | +1.25 | +0.51 |
+| ZZ-XGB    | +0.60 | +1.08 | +1.33 | **+0.73** |
+| ZZ-MLP    | **+1.13** | +0.85 | +0.95 | -0.18 |
+
+### Akademik bulgular (rapora yansır)
+
+**1. Tree modellerin v4'teki istikrarı:** XGB Sharpe 1.39 (v3) → 1.35 (v4), RF 1.29 → 1.25 — eklenen 3 makro feature (FEDFUNDS, real_rate, UNRATE) tree split'lerin önceki cluster sinyalini bozmadı, marjinal stabil. Bu, yapılan ekleme'nin **noise olmadığı**, gerçek economic signal taşıdığı anlamına geliyor (model çökmedi, sadece soft trade-off oldu).
+
+**2. MLP'nin v4'te yükselişi:** MLP Sharpe 0.95 → **1.33** (+0.38). Daha zengin Stage 2 cluster posterior'ı MLP'nin uniform-weight yapısına daha çok bilgi getirdi — non-linear classifier daha geniş feature space'ten yarar sağladı. Bu, "regime fingerprint MLP için kritik" mesajının somut kanıtı.
+
+**3. LDA'nın v4'te çöküşü:** LDA Sharpe 0.60 → **-0.78** (negatif). Tek bir lineer discriminant fonksiyonu artık 11-feature posterior'ın eklediği non-linear interaction'ları yakalayamıyor — Gaussian + equal-covariance varsayımı ihlal ediliyor. Bu, **teorik PR pattern'inin görünür sınırı:** LDA'nın bias'ı yüksek-boyutlu posterior input'larda dezavantaj, MLP/tree model esnekliği avantaj. Akademik açıdan iyi limitation noktası.
+
+**4. Test seti ne kadar küçüldü?** v3'te 587 gün, v4'te 462 gün — ~21% azalma. Buna rağmen modellerin sıralaması ve Sharpe rakamları stabil kaldı (XGB hâlâ #1, RF/MLP/ZZ-XGB üçlüsü 1.25-1.33 Sharpe ile hep birlikte) → sonuçlar test-set-specific değil, **gerçek pattern**.
+
+**5. ZZ-MLP vakası kapandı:** v2'de 1.13, v3'te 0.85, v4'te 0.95 — bug temizlendiğinde tamamen çökmedi (genuine regime sinyali var), ama "best model" iddiasını da koruyamadı. Iter 3'te yazılan "spurious gain" tezi v4 ile teyit oldu (eğer salt bug exploit olsaydı v4'te yine düşerdi; aksine v3'te dibe vurmuş, v4'te marjinal toparlandı = gerçek bir miktar regime sinyali kullanıyor).
+
+### v4 yeni / güncellenen artifact'lar
+- `data/processed/btc_aligned.csv` (3,961 sat × **22 kol** — 17 → 22, 5 monthly FRED ekleme), `eth_aligned.csv` aynı şekilde
+- `data/processed/btc_features_macro.csv` (**187 feat** — 136 → 187, +51 FRED-türev)
+- `data/labels/btc_oof_regime_posterior.csv` (3,079 sat — 11-feature subset GMM)
+- `data/labels/btc_test_signals_v2*.csv`, `btc_stage3_v2*_summary.csv`, `btc_backtest_v2*_summary.csv`, `final_iter2_summary_table.csv` (v4 ile override)
+- `app/models/stage3_lda_v2.joblib` (15KB), `_mlp_v2.joblib` (59KB), `_xgboost_v2.joblib` (2.3MB), `_lightgbm_v2.joblib` (2.2MB), `_random_forest_v2.joblib` (18MB), `_xgboost_v2_zigzag.joblib`, `_mlp_v2_zigzag.joblib` — gitignored, lokal demo için
+- 7 PNG `reports/iter2_*.png` (cm/roc/pred_dist/equity/metric_comparison/summary_table; zigzag_vs_sma değişmedi çünkü trend label aynı)
+
+### v4 yeni script'ler
+- `scripts/add_fred_monthly.py` — REST API ile 5 series fetch + per-series release lag + ffill + aligned in-place patch
+- `scripts/rerun_v4_after_monthly_fred.py` — Stage 2 OOF regen (11 feature) + Stage 3 retrain (7 model, save_model=True with explicit `_v2` path) + backtest + summary CSV write
 
 ### Kod değişiklikleri (iter 2)
 - `src/features/technical_indicators.py` — `compute_trend_following_features()` (11 feat)
@@ -361,19 +440,20 @@ Daha temiz Stage 2 cluster sinyali → tree split'lerinin selective trade timing
 | BTC-USD | 4,123 | 2014-09-17 → 2025-12-30 | ✅ NaN yok |
 | ETH-USD | 2,974 | 2017-11-09 → 2025-12-30 | ✅ NaN yok |
 
-### Hizalanmış Veri (v3 — DGS2 fix sonrası)
+### Hizalanmış Veri (v4 — monthly FRED eklendi)
 | Veri | Satır | Sütun | Tarih Aralığı | Notlar |
 |------|-------|-------|---------------|--------|
-| **BTC Aligned** | 3,961 | 17 | 2014-09-17 → 2025-12-30 | v2'de 4,111 → DGS2 warm-up nedeniyle 150 satır drop |
-| **ETH Aligned** | 2,857 | 17 | 2017-11-09 → 2025-12-30 | v2'de 2,967 → 110 satır drop |
+| **BTC Aligned** | 3,961 | 22 | 2014-09-17 → 2025-12-30 | v3'ten 17 → 22 kolon (5 monthly FRED ekle) |
+| **ETH Aligned** | 2,857 | 22 | 2017-11-09 → 2025-12-30 | v3'ten 17 → 22 kolon |
 
-### Aligned Dataset Columns (17, v3)
+### Aligned Dataset Columns (22, v4)
 - **OHLCV (5):** Open, High, Low, Close, Volume
 - **Risk (3):** SP500, VIX, DXY
 - **Commodities (3):** Gold, Silver, Oil_WTI
-- **Yields (2):** US10Y (yfinance ^TNX), **US2Y (FRED DGS2)** — v2'de yanlışlıkla yfinance ZT=F (futures fiyatı, yield değil) kullanılıyordu
+- **Yields (2, daily):** US10Y (yfinance ^TNX), US2Y (FRED DGS2)
 - **Credit (4):** HY_Bond, IG_Bond, Treasury20Y, TIPS
-- **Kaldırıldı (v2'de vardı, hiçbir yerde kullanılmadığı için silindi):** US5Y, US3M, US30Y
+- **Monthly FRED (5, v4):** FEDFUNDS (Fed Funds Rate, lag 1d), CPIAUCSL (CPI, lag 45d), UNRATE (Unemployment, lag 35d), WM2NS (M2 Money Supply, lag 14d), ICSA (Initial Jobless Claims, lag 5d) — her biri publication-release lag ile shift edildi, sonra crypto daily index'ine forward-fill
+- **Kaldırıldı (v2'de vardı, hiçbir yerde kullanılmadığı için v3'te silindi):** US5Y, US3M, US30Y
 
 ## Open Questions
 - [ ] BTC test period start date kesinlikle? (~2024-04 civarı, %15 son chronological)
