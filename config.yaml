@@ -41,9 +41,14 @@ data:
     "CL=F": "Oil_WTI"
 
   # --- Macro: Bond Yields (rate environment) ---
+  # US10Y from yfinance ^TNX (yield index, %).
+  # US2Y from FRED DGS2 (daily 2-year constant-maturity yield, %).
+  # NOTE: yfinance ZT=F is futures *price*, not yield — using FRED for the 2Y leg
+  # so that derived spreads (Yield_Curve_10Y_2Y) are economically meaningful.
   macro_yields:
     "^TNX": "US10Y"
-    "ZT=F": "US2Y"
+  macro_yields_fred:
+    DGS2: "US2Y"
 
   # --- Macro: Credit & Inflation Proxies ---
   macro_credit:

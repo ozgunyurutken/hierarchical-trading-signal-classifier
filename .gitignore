@@ -42,5 +42,8 @@ Thumbs.db
 # Logs
 *.log
 
+# Timestamped backup snapshots produced by patch / regen scripts
+*.backup_[0-9]*.csv
+
 # Docker
 docker/.env
