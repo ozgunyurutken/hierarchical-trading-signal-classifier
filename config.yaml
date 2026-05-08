@@ -1,170 +1,389 @@
-# ============================================
-# Crypto Signal Classifier - Configuration
-# ============================================
+# V5 — From-Scratch Configuration
+# Proposal-uyumlu (BBL514E PR Term Project) + literatür-supported.
+# Tüm hyperparameter ve dosya yolları burada — ASLA source koda hardcode etme.
+# Branch: v5-from-scratch (from tag v1.0-iter4-final = ab408d5)
 
-# --- Project Paths ---
-paths:
-  data_raw: "data/raw"
-  data_processed: "data/processed"
-  data_labels: "data/labels"
-  models: "app/models"
-  reports: "reports"
+project:
+  name: "Three-Stage Hierarchical Crypto Trading Signal Classifier"
+  version: "v5"
+  paper_target: true   # Bu sürüm paper'da yer alacak
 
-# --- Data Collection ---
+# ============================================================
+# 1. DATA
+# ============================================================
 data:
-  # Each coin has its own start date (max history available)
-  symbols:
-    BTC-USD:
-      start_date: "2014-09-17"
-    ETH-USD:
-      start_date: "2017-11-09"
+  # 13 karar #1: 2018-01 → 2025-12 ("modern BTC era", post-2017 bull peak)
+  start_date: "2018-01-01"
   end_date: "2025-12-31"
 
-  # Macro start: earliest common date across all macro tickers
-  macro_start_date: "2007-04-11"  # HYG is the youngest macro ticker
+  symbols:
+    BTC-USD:
+      start_date: "2018-01-01"
+      label: "BTC"
+    ETH-USD:
+      start_date: "2018-01-01"
+      label: "ETH"
 
-  # Timezone alignment: macro data is shifted 1 day forward.
-  # NYSE closes at 21:00 UTC, crypto daily candle closes at 00:00 UTC.
-  # So T-day S&P close is only usable for T+1 crypto signals.
+  # macro 2017-01 başlangıç (1-yıl warm-up rolling z-score için)
+  macro_start_date: "2017-01-01"
+
+  # Timezone alignment
   macro_lag_days: 1
 
-  # --- Macro: Risk Appetite & Volatility ---
+  # ----- Macro features (proposal §2.3 — 7 raw + 2 derived) -----
   macro_risk:
     "^GSPC": "SP500"
     "^VIX": "VIX"
     "DX-Y.NYB": "DXY"
 
-  # --- Macro: Commodities & Store of Value ---
   macro_commodities:
     "GC=F": "Gold"
-    "SI=F": "Silver"
-    "CL=F": "Oil_WTI"
+    "SI=F": "Silver"  # for derived Gold/Silver ratio
 
-  # --- Macro: Bond Yields (rate environment) ---
-  # US10Y from yfinance ^TNX (yield index, %).
-  # US2Y from FRED DGS2 (daily 2-year constant-maturity yield, %).
-  # NOTE: yfinance ZT=F is futures *price*, not yield — using FRED for the 2Y leg
-  # so that derived spreads (Yield_Curve_10Y_2Y) are economically meaningful.
   macro_yields:
     "^TNX": "US10Y"
   macro_yields_fred:
-    DGS2: "US2Y"
+    DGS2: "US2Y"  # Yield curve = 10Y - 2Y derived feature
 
-  # --- Macro: Credit & Inflation Proxies ---
-  macro_credit:
-    "HYG": "HY_Bond"    # High Yield corporate bond ETF
-    "LQD": "IG_Bond"    # Investment Grade bond ETF
-    "TLT": "Treasury20Y" # Long-term treasury ETF
-    "TIP": "TIPS"        # Inflation-protected securities ETF
-
-  # --- Derived spreads (computed in feature engineering, not downloaded) ---
-  # Yield_Curve_10Y_2Y:  US10Y - US2Y
-  # Credit_Spread:       log(HYG) - log(LQD) returns
-  # Gold_Silver_Ratio:   Gold / Silver
-  # Breakeven_Inflation: US10Y - TIPS yield proxy
-  # Real_Rate:           US10Y - Breakeven_Inflation
-
-  # --- Optional: FRED monthly (requires fredapi + FRED_API_KEY) ---
-  macro_fred_optional:
+  # FRED monthly (proposal §2.3) — forward-filled to daily with publication-release lag
+  macro_fred_monthly:
     FEDFUNDS: "Federal Funds Rate"
     CPIAUCSL: "CPI All Urban Consumers"
     UNRATE: "Unemployment Rate"
-    WM2NS: "M2 Money Supply"
-    ICSA: "Initial Jobless Claims"
 
-# --- Feature Engineering ---
+  # Derived spreads (computed in feature engineering)
+  derived_spreads:
+    Yield_Curve_10Y_2Y: "US10Y - US2Y"
+    Gold_Silver_Ratio: "Gold / Silver"
+
+# ============================================================
+# 2. FEATURE ENGINEERING
+# ============================================================
 features:
-  trend_indicators:  # Stage 1 candidates
-    sma_periods: [20, 50, 200]
-    ema_periods: [12, 26]
-    adx_period: 14
-    use_parabolic_sar: true
 
-  oscillator_indicators:  # Stage 3 candidates
-    rsi_period: 14
-    stochastic_k_period: 14
-    stochastic_d_period: 3
-    macd_fast: 12
-    macd_slow: 26
-    macd_signal: 9
-    williams_r_period: 14
-    cci_period: 20
-    roc_period: 10
+  # ----- Stage 1 / Stage 3 Technical Indicators (proposal §2.2) -----
+  technical:
+    trend:
+      sma_periods: [20, 50, 200]
+      ema_periods: [12, 26]
+      adx_period: 14
+      use_parabolic_sar: true
 
-  volatility_indicators:
-    bb_period: 20
-    bb_std: 2
-    atr_period: 14
-    hist_vol_period: 20
+    momentum:
+      rsi_period: 14
+      stochastic_k_period: 14
+      stochastic_d_period: 3
+      macd_fast: 12
+      macd_slow: 26
+      macd_signal: 9
+      williams_r_period: 14
 
-  volume_indicators:
-    volume_sma_period: 20
+    volatility:
+      bollinger_period: 20
+      bollinger_std: 2.0
+      atr_period: 14
 
-  macro_transformations:
-    rolling_windows: [20, 50, 100]
+    volume:
+      obv: true
+      vwap: true                # 13 karar #VWAP: ekle (proposal sözü)
+      volume_sma_period: 20
+      volume_zscore_period: 20
 
-  selection:
-    correlation_threshold: 0.95
-    top_k_per_stage: 15
+  # ----- Stage 1 input subset (long-horizon trend features) -----
+  stage1_features:
+    - "SMA_20"
+    - "SMA_50"
+    - "SMA_200"
+    - "EMA_12"
+    - "EMA_26"
+    - "SMA_20_above_50"          # cross indicator
+    - "Close_above_SMA_50"
+    - "Close_above_SMA_200"
+    - "ADX_14"
+    - "Parabolic_SAR_position"   # (close - SAR) / close
+    - "log_ret_5d"               # short momentum context
 
-# --- Label Generation ---
+  # ----- Stage 2 input subset (proposal §2.3 — 7 raw + 2 derived = 9) -----
+  stage2_features:
+    - "VIX"                      # proposal core
+    - "VIX_zscore_60"            # rolling z-score (proposal: "rolling z-score transformations")
+    - "SP500_log_return_5d"      # equity momentum proxy
+    - "DXY_zscore_60"
+    - "Gold_log_return_20d"
+    - "FEDFUNDS_change_60d"      # 3-mo FFR change (rate-of-change per proposal)
+    - "CPI_yoy_change"           # 252-day CPI YoY
+    - "UNRATE_change_180d"       # 6-mo unemployment change
+    - "Yield_Curve_10Y_2Y"       # derived spread
+    # Optional derived: Gold_Silver_Ratio (ablation extra)
+
+  # ----- Stage 3 input subset (proposal §3 — short-term oscillators only) -----
+  stage3_oscillator_features:
+    - "RSI_14"
+    - "MACD_line"
+    - "MACD_signal"
+    - "MACD_histogram"
+    - "Stoch_K_14"
+    - "Stoch_D_3"
+    - "Williams_R_14"
+    - "BB_upper"
+    - "BB_lower"
+    - "BB_pct_b"
+    - "ATR_14"
+    - "OBV"
+    - "VWAP"                     # eklendi (13 karar onay)
+    - "Volume_SMA_20"
+    - "Volume_zscore_20"
+
+# ============================================================
+# 3. LABELS
+# ============================================================
 labels:
-  trend:
+
+  # ----- Stage 1: Trend (proposal §2.4) -----
+  stage1_trend:
+    method: "sma_crossover"
     sma_short: 20
     sma_long: 50
-    min_persistence_days: 3
+    persistence_days: 3          # proposal sözü
+    classes: ["Uptrend", "Downtrend", "Sideways"]
+    confirmation_above_long: true   # SMA20>SMA50 AND Close>SMA50 → Up
 
-  regime:
+  # ----- Stage 2: Macro Regime (proposal §2.4 — K-Means hybrid) -----
+  stage2_regime:
+    method: "kmeans_semantic"
     n_clusters: 3
-    cluster_range: [2, 3, 4, 5, 6]
-    methods: ["kmeans", "gmm", "hmm"]
+    classes: ["Risk-On", "Risk-Off", "Neutral"]
+    random_state: 42
 
-  signal:
-    forward_return_days: 5
-    fixed_threshold: 0.01
-    adaptive_constant: 0.5
-    adaptive_rolling_window: 20
+    # Cluster validation (proposal §2.4: "Elbow + Silhouette")
+    validation:
+      elbow_k_range: [2, 3, 4, 5, 6, 7, 8]
+      use_silhouette: true
+      use_gap_statistic: true       # eklendi (Tibshirani 2001)
+      use_calinski_harabasz: true   # eklendi (Caliński & Harabasz 1974)
 
-# --- Model Training ---
+    # Semantic relabeling rule (proposal §2.4)
+    semantic_rules:
+      risk_on:
+        criterion: "lowest_VIX_AND_highest_SP500_return"
+      risk_off:
+        criterion: "highest_VIX_AND_most_negative_SP500_return"
+      neutral:
+        criterion: "remainder"
+
+    # Walk-forward refit (eklendi — OOD stickiness'e karşı)
+    walk_forward_refit: true
+
+  # ----- Stage 3: Buy/Sell/Hold Signal (proposal §2.4 — DUAL ablation) -----
+  stage3_signal:
+    forward_horizon_days: 5
+    classes: ["Buy", "Sell", "Hold"]
+
+    # Dual labeling: proposal-strict ±1% + literature-supported adaptive
+    methods:
+      adaptive:                  # primary
+        rolling_std_window: 20
+        constant: 0.5            # threshold = 0.5 × rolling_std
+      fixed:                     # ablation comparison (proposal-strict)
+        threshold_pct: 0.01      # ±1%
+
+    primary_method: "adaptive"   # primary, fixed eklenir ablation
+
+# ============================================================
+# 4. TRAINING
+# ============================================================
 training:
-  test_size: 0.15  # Last 15% chronological
-  min_train_window_months: 6
-  walk_forward_step_months: 1
-  n_oof_folds: 5
+  # 70/15/15 chronological (proposal §5)
+  train_size: 0.70
+  validation_size: 0.15
+  test_size: 0.15
   random_state: 42
 
-  classifiers:
-    xgboost:
-      n_estimators: [100, 300, 500]
-      max_depth: [3, 5, 7]
-      learning_rate: [0.01, 0.05, 0.1]
-      subsample: [0.7, 0.8, 1.0]
+  # Walk-forward expanding window (proposal §5 + Pardo WFA)
+  walk_forward:
+    method: "expanding"
+    n_folds: 5
+    min_train_months: 24         # 2 yıl minimum
+    step_months: 6
 
-    lightgbm:
-      n_estimators: [100, 300, 500]
-      num_leaves: [15, 31, 63]
-      learning_rate: [0.01, 0.05, 0.1]
+  # Optuna Bayesian (proposal §5)
+  optuna:
+    n_trials: 30
+    sampler: "TPE"
+    pruner: "MedianPruner"
+    timeout_seconds: 600
 
-    random_forest:
-      n_estimators: [100, 300, 500]
-      max_depth: [5, 10, 20, null]
-      min_samples_leaf: [1, 5, 10]
+  # Class imbalance (proposal §2.4 — V5 policy: cost-sensitive, NOT SMOTE)
+  imbalance:
+    strategy: "class_weight"     # SMOTE rejected for time-series (López de Prado)
+    sklearn_class_weight: "balanced"
+    xgboost_scale_pos_weight: "auto"  # computed from train distribution
+    optional_threshold_tuning: true   # post-hoc Lipton 2014
 
-    mlp:
-      hidden_layers: [[64, 32], [128, 64], [128, 64, 32]]
-      learning_rate: [0.001, 0.0005]
-      batch_size: [32, 64]
-      patience: 10
-      max_epochs: 200
+# ============================================================
+# 5. MODELS (proposal §3.3 — 4 algorithms)
+# ============================================================
+models:
+  primary:
+    - "xgboost"
+    - "lightgbm"
+    - "random_forest"
+    - "mlp"
+  optional:
+    - "catboost"
+    - "tabnet"
 
-# --- Backtesting ---
-backtesting:
-  transaction_fee: 0.001    # 0.1%
-  slippage: 0.0005          # 0.05%
-  initial_capital: 10000
-  position_type: "long_only"  # or "long_short"
+  scaling:
+    tree_models: false          # no scaling for tree-based
+    mlp_kmeans: true            # StandardScaler fit on train only
 
-# --- API ---
-api:
-  host: "0.0.0.0"
-  port: 8000
+  xgboost:
+    base:
+      tree_method: "hist"
+      n_jobs: 1
+      random_state: 42
+
+  lightgbm:
+    base:
+      force_col_wise: true
+      n_jobs: 1
+      random_state: 42
+
+  random_forest:
+    base:
+      n_jobs: -1
+      random_state: 42
+
+  mlp:
+    base:
+      max_iter: 500
+      random_state: 42
+      early_stopping: true
+      validation_fraction: 0.15
+
+# ============================================================
+# 6. ABLATION (proposal §3.2)
+# ============================================================
+ablation:
+  configs:
+    - name: "flat"
+      description: "Single classifier on ALL features (tech + macro + oscillators)"
+      stage1: false
+      stage2: false
+    - name: "2_stage_trend"
+      description: "Stage 1 (Trend) + Stage 3 (Signal). No macro context."
+      stage1: true
+      stage2: false
+    - name: "3_stage_full"
+      description: "Stage 1 + Stage 2 + Stage 3. Full hierarchical framework."
+      stage1: true
+      stage2: true
+
+  comparisons:
+    - "flat_vs_2stage"
+    - "flat_vs_3stage"
+    - "2stage_vs_3stage"
+    - "btc_vs_eth"
+    - "model_per_stage"
+    - "signal_vs_buy_and_hold"
+
+# ============================================================
+# 7. EVALUATION (proposal §5)
+# ============================================================
+evaluation:
+  classification_metrics:
+    - "accuracy"
+    - "precision_per_class"
+    - "recall_per_class"
+    - "f1_per_class"
+    - "f1_macro"
+    - "balanced_accuracy"
+    - "matthews_corrcoef"
+    - "confusion_matrix"
+    - "roc_auc_ovr"
+
+  statistical_tests:
+    enabled: true
+    test: "mcnemar"
+    correction: "holm"
+    pairs:
+      - ["flat", "2_stage_trend"]
+      - ["flat", "3_stage_full"]
+      - ["2_stage_trend", "3_stage_full"]
+
+  shap:
+    enabled: true
+    explainer:
+      tree_models: "TreeExplainer"
+      mlp: "KernelExplainer"
+    analysis:
+      - "global_summary_plot"
+      - "feature_importance_bar"
+      - "shap_interaction_top_pairs"
+
+# ============================================================
+# 8. BACKTEST
+# ============================================================
+backtest:
+  initial_capital: 10000.0
+  transaction_cost: 0.001        # 0.1% per trade
+
+  primary_strategy: "long_only"   # proposal-strict
+  bonus_strategy: "regime_sized"   # extension
+  regime_position_sizes:
+    Risk-On: 1.00
+    Neutral: 0.50
+    Risk-Off: 0.00
+
+  benchmark: "buy_and_hold"
+
+  metrics:
+    - "total_return"
+    - "annualized_return"
+    - "sharpe_ratio"
+    - "sortino_ratio"
+    - "max_drawdown"
+    - "calmar_ratio"
+    - "win_rate"
+    - "n_trades"
+    - "profit_factor"
+    - "deflated_sharpe_ratio"
+
+# ============================================================
+# 9. PATHS
+# ============================================================
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  data_labels: "data/labels"
+  reports: "reports"
+  notebooks: "notebooks"
+  models: "app/models"
+  logs: "logs"
+
+  artifact_suffix: "_v5"
+
+# ============================================================
+# 10. STACK & DEPLOYMENT
+# ============================================================
+stack:
+  python_version: ">=3.11"
+  ml_libraries:
+    - "scikit-learn>=1.3"
+    - "xgboost>=2.0"
+    - "lightgbm>=4.0"
+    - "optuna>=3.4"
+    - "imbalanced-learn>=0.11"
+    - "shap>=0.43"
+    - "statsmodels>=0.14"        # McNemar test
+    - "ta>=0.11"                 # TA-Lib alternative
+  data_libraries:
+    - "pandas>=2.0"
+    - "numpy>=1.24"
+    - "yfinance>=0.2"
+    - "fredapi>=0.5"
+
+deployment:
+  backend: "fastapi"
+  frontend: "html_js"
+  containerization: "docker"
