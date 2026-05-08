@@ -1,4 +1,4 @@
-,strategy,total_return,sharpe_ratio,max_drawdown,n_trades,win_rate
-0,v3 ZZ XGBOOST,0.3583,1.0846,-0.1259,18,0.6667
-1,v3 ZZ MLP,0.2588,0.8482,-0.176,17,0.5294
-2,Buy & Hold,0.6157,0.8339,-0.3215,1,
+,strategy,total_return,sharpe_ratio,max_drawdown,n_trades,win_rate,sharpe,max_dd
+5,v4 ZZ XGBOOST,0.4051,1.3287,-0.1141,12,0.9167,,
+6,v4 ZZ MLP,0.3564,0.954,-0.1301,19,0.7895,,
+0,Buy & Hold,0.4756,0.7514,-0.3215,1,,0.7514,-0.3215
