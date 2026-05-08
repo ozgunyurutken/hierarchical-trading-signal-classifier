@@ -10,43 +10,50 @@
     <div class="container">
         <header>
             <h1>Crypto Signal Classifier</h1>
-            <p class="subtitle">Three-Stage Hierarchical ML Pipeline for Trading Signals</p>
+            <p class="subtitle">Three-Stage Hierarchical ML Pipeline · BBL514E Pattern Recognition</p>
         </header>
 
         <main>
-            <!-- Prediction Section -->
+            <!-- Date-based prediction (primary, demo-safe) -->
             <section class="card">
-                <h2>Get Prediction</h2>
+                <h2>Get Prediction by Date</h2>
+                <p class="hint">Test set tarihleri (son %15 chronological). Pre-computed features → no internet needed.</p>
                 <div class="input-group">
-                    <label for="symbol-select">Select Cryptocurrency:</label>
+                    <label for="symbol-select">Symbol:</label>
                     <select id="symbol-select">
                         <option value="BTC">Bitcoin (BTC)</option>
-                        <option value="ETH">Ethereum (ETH)</option>
                     </select>
-                    <button id="predict-btn" onclick="getPrediction()">Get Prediction</button>
+                    <label for="date-select">Date:</label>
+                    <select id="date-select">
+                        <option value="">— loading dates —</option>
+                    </select>
+                    <label for="model-select">Model:</label>
+                    <select id="model-select">
+                        <option value="lda">LDA</option>
+                        <option value="mlp">MLP</option>
+                    </select>
+                    <button id="predict-btn" onclick="getPredictionByDate()">Get Prediction</button>
                 </div>
             </section>
 
-            <!-- CSV Upload Section -->
+            <!-- Live prediction (best-effort, requires internet) -->
             <section class="card">
-                <h2>Upload OHLCV Data</h2>
-                <p class="hint">Upload a CSV file with columns: Date, Open, High, Low, Close, Volume</p>
+                <h2>Live Prediction (yfinance)</h2>
+                <p class="hint">Latest market data via yfinance. Internet bağlantısı gerekir; offline ise üstteki tarih dropdown'unu kullan.</p>
                 <div class="input-group">
-                    <input type="file" id="csv-file" accept=".csv">
-                    <button onclick="predictFromCSV()">Predict from CSV</button>
+                    <button onclick="getLivePrediction()">Get Live Prediction</button>
                 </div>
             </section>
 
-            <!-- Result Section -->
+            <!-- Result -->
             <section id="result-section" class="card hidden">
-                <h2>Prediction Result</h2>
-
+                <h2>Prediction Result <span id="result-meta" class="hint"></span></h2>
                 <div class="signal-display">
                     <div id="signal-badge" class="signal-badge">
                         <span id="signal-text">--</span>
                     </div>
                     <div class="confidence-container">
-                        <label>Confidence:</label>
+                        <label>Confidence</label>
                         <div class="progress-bar">
                             <div id="confidence-bar" class="progress-fill"></div>
                         </div>
@@ -54,7 +61,6 @@
                     </div>
                 </div>
 
-                <!-- Stage Breakdown -->
                 <div class="stage-breakdown">
                     <div class="stage-card">
                         <h3>Stage 1: Trend</h3>
@@ -71,13 +77,11 @@
                 </div>
             </section>
 
-            <!-- Error Section -->
             <section id="error-section" class="card hidden error-card">
                 <h2>Error</h2>
                 <p id="error-message"></p>
             </section>
 
-            <!-- Loading -->
             <div id="loading" class="hidden">
                 <div class="spinner"></div>
                 <p>Computing prediction...</p>
@@ -85,7 +89,7 @@
         </main>
 
         <footer>
-            <p>BBL514E Pattern Recognition Term Project | 2026</p>
+            <p>BBL514E Pattern Recognition Term Project · 2026 · MVP build</p>
         </footer>
     </div>
 

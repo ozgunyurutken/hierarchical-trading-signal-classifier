@@ -72,6 +72,8 @@ class XGBoostClassifier(BaseClassifier):
             "random_state": 42,
             "verbosity": 0,
             "use_label_encoder": False,
+            "n_jobs": 1,                # macOS libomp segfault workaround
+            "tree_method": "hist",      # faster, single-threaded safe
         }
         default_params.update(self.params)
 
@@ -121,6 +123,8 @@ class LightGBMClassifier(BaseClassifier):
             "objective": "multiclass",
             "random_state": 42,
             "verbose": -1,
+            "n_jobs": 1,                # macOS libomp segfault workaround
+            "force_col_wise": True,
         }
         default_params.update(self.params)
 
@@ -167,7 +171,7 @@ class RandomForestClassifierWrapper(BaseClassifier):
             "max_depth": 10,
             "min_samples_leaf": 5,
             "random_state": 42,
-            "n_jobs": -1,
+            "n_jobs": 1,                # match XGB/LGBM behavior on macOS
         }
         default_params.update(self.params)
 
@@ -307,6 +311,61 @@ class MLPClassifierWrapper(BaseClassifier):
         return proba
 
 
+class LDAClassifier(BaseClassifier):
+    """
+    Linear Discriminant Analysis wrapper (classical Pattern Recognition baseline).
+
+    Generative model with two assumptions:
+        1. Class-conditional densities are Gaussian: p(x|y=k) = N(x; μ_k, Σ)
+        2. All classes share the SAME covariance matrix Σ (vs QDA which allows Σ_k)
+
+    Discriminant function (linear in x):
+        g_k(x) = x^T Σ^{-1} μ_k - 0.5 μ_k^T Σ^{-1} μ_k + log π_k
+
+    The decision rule assigns x to class argmax_k g_k(x). The posterior probability
+    is obtained via softmax over discriminants.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__("LDA", **kwargs)
+        self.scaler = StandardScaler()
+
+    def fit(self, X_train, y_train, X_val=None, y_val=None):
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+
+        y_enc = self._encode_labels(y_train)
+        X_scaled = self.scaler.fit_transform(X_train)
+
+        default_params = {"solver": "svd", "store_covariance": True}
+        default_params.update(self.params)
+
+        # 'shrinkage' requires lsqr or eigen solver
+        if default_params.get("shrinkage") is not None and default_params.get("solver") == "svd":
+            default_params["solver"] = "lsqr"
+
+        self.model = LinearDiscriminantAnalysis(**default_params)
+        self.model.fit(X_scaled, y_enc)
+        self.classes_ = self.label_encoder.classes_
+        self.is_fitted = True
+        return self
+
+    def predict(self, X):
+        X_scaled = self.scaler.transform(X)
+        return self._decode_labels(self.model.predict(X_scaled))
+
+    def predict_proba(self, X):
+        X_scaled = self.scaler.transform(X)
+        return self.model.predict_proba(X_scaled)
+
+    def get_feature_importance(self):
+        if self.model is None:
+            return None
+        coefs = np.abs(self.model.coef_)
+        if coefs.ndim == 2:
+            return coefs.mean(axis=0)
+        return coefs
+
+
 def get_classifier(name: str, **kwargs) -> BaseClassifier:
     """Factory function to create classifier by name."""
     classifiers = {
@@ -314,6 +373,7 @@ def get_classifier(name: str, **kwargs) -> BaseClassifier:
         "lightgbm": LightGBMClassifier,
         "random_forest": RandomForestClassifierWrapper,
         "mlp": MLPClassifierWrapper,
+        "lda": LDAClassifier,
     }
     if name.lower() not in classifiers:
         raise ValueError(f"Unknown classifier: {name}. Available: {list(classifiers.keys())}")
@@ -327,4 +387,5 @@ def get_all_classifiers(**kwargs) -> dict[str, BaseClassifier]:
         "lightgbm": LightGBMClassifier(**kwargs),
         "random_forest": RandomForestClassifierWrapper(**kwargs),
         "mlp": MLPClassifierWrapper(**kwargs),
+        "lda": LDAClassifier(**kwargs),
     }

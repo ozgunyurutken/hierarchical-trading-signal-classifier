@@ -54,12 +54,62 @@ def expanding_window_walk_forward(
     return folds
 
 
+def tune_stage1(
+    X: pd.DataFrame,
+    y: pd.Series,
+    classifier_name: str = "lda",
+    n_trials: int = 20,
+    save_model: bool = True,
+    step_months: int | None = None,
+    min_train_months: int | None = None,
+) -> dict:
+    """
+    Run Optuna walk-forward HP search, then retrain Stage 1 with best params.
+
+    Returns the same dict as `train_stage1` plus 'best_params' and 'optuna_study'.
+
+    `step_months` and `min_train_months` override config defaults; useful for the MVP
+    where config's step_months=1 produces too many folds for Optuna trials.
+    """
+    from src.models.optuna_helpers import tune_classifier_walk_forward
+
+    config = cfg()
+    common_idx = X.index.intersection(y.index)
+    X = X.loc[common_idx]
+    y = y.loc[common_idx]
+
+    folds = expanding_window_walk_forward(
+        X, y,
+        min_train_months=min_train_months or config["training"]["min_train_window_months"],
+        step_months=step_months or config["training"]["walk_forward_step_months"],
+    )
+
+    best_params, study = tune_classifier_walk_forward(
+        X, y, classifier_name,
+        folds=folds,
+        n_trials=n_trials,
+        study_name=f"stage1_{classifier_name}",
+        timeout_seconds=600 if classifier_name.lower() == "mlp" else None,
+    )
+    logger.info(f"Stage 1 best params ({classifier_name}): {best_params}")
+
+    result = train_stage1(
+        X, y, classifier_name, params=best_params, save_model=save_model,
+        step_months=step_months, min_train_months=min_train_months,
+    )
+    result["best_params"] = best_params
+    result["optuna_study"] = study
+    return result
+
+
 def train_stage1(
     X: pd.DataFrame,
     y: pd.Series,
     classifier_name: str = "xgboost",
     params: dict | None = None,
     save_model: bool = True,
+    step_months: int | None = None,
+    min_train_months: int | None = None,
 ) -> dict:
     """
     Train a Stage 1 trend classifier with walk-forward validation.
@@ -98,15 +148,18 @@ def train_stage1(
         f"{X.shape[1]} features, classes={y.unique().tolist()}"
     )
 
-    # Walk-forward folds
+    # Walk-forward folds (CLI override)
     folds = expanding_window_walk_forward(
         X, y,
-        min_train_months=config["training"]["min_train_window_months"],
-        step_months=config["training"]["walk_forward_step_months"],
+        min_train_months=min_train_months or config["training"]["min_train_window_months"],
+        step_months=step_months or config["training"]["walk_forward_step_months"],
     )
 
-    # OOF predictions
-    n_classes = len(y.unique())
+    # Stable class list — used to map per-fold proba into the global OOF matrix
+    # safely even when a fold's training slice is missing a rare class.
+    all_classes = sorted(y.unique())
+    n_classes = len(all_classes)
+    class_to_col = {c: i for i, c in enumerate(all_classes)}
     oof_proba = np.full((len(X), n_classes), np.nan)
     fold_metrics = []
 
@@ -118,15 +171,18 @@ def train_stage1(
 
         clf = get_classifier(classifier_name, **params)
 
-        # Handle NaN
         X_train_clean = X_train_fold.fillna(X_train_fold.median())
         X_val_clean = X_val_fold.fillna(X_train_fold.median())
 
         clf.fit(X_train_clean, y_train_fold, X_val_clean, y_val_fold)
 
-        # Predictions
         val_pred = clf.predict(X_val_clean)
-        val_proba = clf.predict_proba(X_val_clean)
+        val_proba_local = clf.predict_proba(X_val_clean)
+
+        # Map local fold proba into the global class space (zero-filled if missing)
+        val_proba = np.zeros((len(val_idx), n_classes))
+        for local_i, c in enumerate(clf.classes_):
+            val_proba[:, class_to_col[c]] = val_proba_local[:, local_i]
         oof_proba[val_idx] = val_proba
 
         # Fold metrics
@@ -162,11 +218,11 @@ def train_stage1(
     avg_f1 = metrics_df["f1_macro"].mean()
     logger.info(f"  Average: acc={avg_acc:.4f}, f1_macro={avg_f1:.4f}")
 
-    # OOF predictions DataFrame
+    # OOF predictions DataFrame (uses the stable global class list, not just clf_final)
     oof_df = pd.DataFrame(
         oof_proba,
         index=X.index,
-        columns=[f"trend_prob_{c}" for c in clf_final.classes_],
+        columns=[f"trend_prob_{c}" for c in all_classes],
     )
 
     return {

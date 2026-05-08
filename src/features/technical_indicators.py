@@ -159,6 +159,50 @@ def compute_volume_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return features
 
 
+def compute_trend_following_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Trend-following / momentum features for Stage 3 input (iter 2).
+
+    These are designed to counter the mean-reversion bias of RSI/Stoch/CCI etc.
+    During strong uptrends classical oscillators stay overbought, pushing models
+    toward "Sell". These features explicitly carry the trend signal forward.
+    """
+    close = df["Close"]
+
+    f = pd.DataFrame(index=df.index)
+
+    # Multi-horizon log returns (cumulative momentum)
+    log_close = np.log(close)
+    for n in [5, 10, 20, 50, 100]:
+        f[f"log_ret_{n}d"] = log_close.diff(n)
+
+    # SMA-200 directional bias (binary): is price in long-term uptrend?
+    sma_200 = close.rolling(200).mean()
+    f["above_sma_200"] = (close > sma_200).astype(float)
+
+    # ADX-based strong-trend flag (uses pre-computed ADX_14 if available, else recompute)
+    adx_indicator = ta.trend.ADXIndicator(df["High"], df["Low"], close, window=14)
+    adx = adx_indicator.adx()
+    f["adx_strong_trend"] = (adx > 25).astype(float)
+    f["adx_value"] = adx  # raw level too — directly informative
+
+    # Donchian-channel position (where is price within 20-day range?)
+    high_20 = df["High"].rolling(20).max()
+    low_20 = df["Low"].rolling(20).min()
+    f["donchian_pct"] = (close - low_20) / (high_20 - low_20 + 1e-12)
+
+    # Return-to-volatility ratio (Sharpe-like, no annualization)
+    daily_ret = close.pct_change()
+    rolling_vol_20 = daily_ret.rolling(20).std()
+    f["sharpe_proxy_20d"] = daily_ret.rolling(20).mean() / (rolling_vol_20 + 1e-12)
+
+    # Cumulative breakout: how many of the last 50 days were higher highs?
+    f["higher_high_count_50"] = (df["High"] > df["High"].shift(1)).rolling(50).sum() / 50
+
+    logger.info(f"Computed {len(f.columns)} trend-following features")
+    return f
+
+
 def compute_all_technical_indicators(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """
     Compute all technical indicators grouped by category.

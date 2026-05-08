@@ -1,0 +1,51 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Notebooks (large + not needed at runtime)
+notebooks/
+.ipynb_checkpoints/
+
+# Reports (figures, generated)
+reports/
+
+# Docs / project mgmt
+*.md
+!app/static/*.md  # keep any in static if used
+PLAN.md
+MEMORY.md
+CLAUDE.md
+*.pdf
+
+# Data: only processed + labels needed at runtime
+data/raw/
+data/processed/btc_features_all.csv
+data/processed/btc_adf_results.csv
+
+# Git / claude / hizir
+.git/
+.gitignore
+.claude/
+
+# Docker meta
+docker/
+.dockerignore

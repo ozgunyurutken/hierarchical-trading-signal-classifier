@@ -43,9 +43,6 @@ data:
   # --- Macro: Bond Yields (rate environment) ---
   macro_yields:
     "^TNX": "US10Y"
-    "^FVX": "US5Y"
-    "^IRX": "US3M"
-    "^TYX": "US30Y"
     "ZT=F": "US2Y"
 
   # --- Macro: Credit & Inflation Proxies ---
@@ -57,7 +54,6 @@ data:
 
   # --- Derived spreads (computed in feature engineering, not downloaded) ---
   # Yield_Curve_10Y_2Y:  US10Y - US2Y
-  # Yield_Curve_10Y_3M:  US10Y - US3M
   # Credit_Spread:       log(HYG) - log(LQD) returns
   # Gold_Silver_Ratio:   Gold / Silver
   # Breakeven_Inflation: US10Y - TIPS yield proxy

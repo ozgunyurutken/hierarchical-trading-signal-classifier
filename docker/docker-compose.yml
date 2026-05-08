@@ -5,13 +5,13 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    image: crypto-signal-classifier:mvp
     container_name: crypto-signal-classifier
     ports:
       - "8000:8000"
-    volumes:
-      - ../app/models:/project/app/models:ro
     environment:
       - PYTHONPATH=/project
+      - PYTHONUNBUFFERED=1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

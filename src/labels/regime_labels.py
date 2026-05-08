@@ -185,6 +185,168 @@ def evaluate_clustering_k(
     return pd.DataFrame(results)
 
 
+def compute_oof_regime_posterior(
+    X: pd.DataFrame,
+    method: str = "gmm",
+    n_clusters: int = 3,
+    n_folds: int = 5,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, object, StandardScaler]:
+    """
+    Compute out-of-fold (OOF) regime posterior probabilities using chronological folds.
+
+    Strategy: walk-forward style — for each fold, fit cluster model ONLY on data BEFORE
+    the validation fold, then predict posterior on the validation fold. The first fold
+    (no prior data) is dropped. This prevents look-ahead leakage when these probabilities
+    are later used as features for Stage 3.
+
+    For final inference (test set), a fresh model fitted on the entire training set is
+    also returned so the same artifact can serve API requests.
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Macro features (chronologically ordered).
+    method : str
+        'gmm' (recommended — natural soft posterior), 'hmm', or 'kmeans'
+        (kmeans converts distances to softmax-style soft probs).
+    n_clusters : int
+        Number of regimes (default 3: Risk-On / Neutral / Risk-Off).
+    n_folds : int
+        Number of chronological folds for OOF generation.
+    random_state : int
+        Random seed.
+
+    Returns
+    -------
+    tuple of (oof_posterior_df, full_fitted_model, full_fitted_scaler)
+        - oof_posterior_df : pd.DataFrame (n × n_clusters), index = X.index minus first fold
+        - full_fitted_model : model trained on all of X (for serving / test inference)
+        - full_fitted_scaler : scaler fitted on all of X
+    """
+    n = len(X)
+    fold_size = n // n_folds
+    cluster_cols = [f"regime_prob_{i}" for i in range(n_clusters)]
+
+    oof = np.full((n, n_clusters), np.nan)
+    valid_idx_count = 0
+
+    for fold_i in range(n_folds):
+        val_start = fold_i * fold_size
+        val_end = val_start + fold_size if fold_i < n_folds - 1 else n
+
+        if val_start == 0:
+            # No prior data to train on; skip first fold
+            logger.info(f"  OOF fold {fold_i}: skipped (no train data)")
+            continue
+
+        X_train_fold = X.iloc[:val_start]
+        X_val_fold = X.iloc[val_start:val_end]
+
+        # Fit on fold-train
+        scaler_fold = StandardScaler()
+        X_train_scaled = scaler_fold.fit_transform(X_train_fold)
+        X_val_scaled = scaler_fold.transform(X_val_fold)
+
+        if method == "gmm":
+            model = GaussianMixture(
+                n_components=n_clusters,
+                covariance_type="full",
+                random_state=random_state,
+            )
+            model.fit(X_train_scaled)
+            posterior = model.predict_proba(X_val_scaled)
+        elif method == "hmm":
+            from hmmlearn.hmm import GaussianHMM
+            model = GaussianHMM(
+                n_components=n_clusters,
+                covariance_type="full",
+                n_iter=200,
+                random_state=random_state,
+            )
+            model.fit(X_train_scaled)
+            posterior = model.predict_proba(X_val_scaled)
+        elif method == "kmeans":
+            model = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+            model.fit(X_train_scaled)
+            # Convert centroid distances to soft posterior via softmax(-distance)
+            dists = model.transform(X_val_scaled)  # (n, n_clusters)
+            neg = -dists
+            exp = np.exp(neg - neg.max(axis=1, keepdims=True))
+            posterior = exp / exp.sum(axis=1, keepdims=True)
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+        oof[val_start:val_end] = posterior
+        valid_idx_count += val_end - val_start
+        logger.info(
+            f"  OOF fold {fold_i}: train={val_start}, val={val_end - val_start}, "
+            f"method={method}"
+        )
+
+    # Build DataFrame and drop NaN rows (first fold)
+    oof_df = pd.DataFrame(oof, index=X.index, columns=cluster_cols)
+    valid_mask = ~oof_df.isna().any(axis=1)
+    oof_df = oof_df[valid_mask]
+
+    # Fit final model on ALL data for serving inference
+    final_scaler = StandardScaler()
+    X_full_scaled = final_scaler.fit_transform(X)
+
+    if method == "gmm":
+        full_model = GaussianMixture(
+            n_components=n_clusters,
+            covariance_type="full",
+            random_state=random_state,
+        )
+        full_model.fit(X_full_scaled)
+    elif method == "hmm":
+        from hmmlearn.hmm import GaussianHMM
+        full_model = GaussianHMM(
+            n_components=n_clusters,
+            covariance_type="full",
+            n_iter=200,
+            random_state=random_state,
+        )
+        full_model.fit(X_full_scaled)
+    elif method == "kmeans":
+        full_model = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+        full_model.fit(X_full_scaled)
+
+    logger.info(
+        f"OOF regime posterior ({method}): {len(oof_df)}/{n} valid rows, "
+        f"first fold dropped ({n - len(oof_df)} rows)"
+    )
+
+    return oof_df, full_model, final_scaler
+
+
+def predict_regime_posterior(
+    X: pd.DataFrame,
+    model: object,
+    scaler: StandardScaler,
+    method: str,
+    n_clusters: int = 3,
+) -> pd.DataFrame:
+    """
+    Predict regime posterior using a pre-fitted model + scaler (for serving / test inference).
+    """
+    cluster_cols = [f"regime_prob_{i}" for i in range(n_clusters)]
+    X_scaled = scaler.transform(X)
+
+    if method == "gmm" or method == "hmm":
+        posterior = model.predict_proba(X_scaled)
+    elif method == "kmeans":
+        dists = model.transform(X_scaled)
+        neg = -dists
+        exp = np.exp(neg - neg.max(axis=1, keepdims=True))
+        posterior = exp / exp.sum(axis=1, keepdims=True)
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+    return pd.DataFrame(posterior, index=X.index, columns=cluster_cols)
+
+
 def compare_methods(
     X: pd.DataFrame,
     macro_df: pd.DataFrame,

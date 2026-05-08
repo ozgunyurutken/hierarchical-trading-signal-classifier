@@ -139,6 +139,65 @@ def generate_oof_predictions(
     return oof_trend_df, oof_regime_df
 
 
+def tune_stage3(
+    X_oscillator: pd.DataFrame,
+    y_signal: pd.Series,
+    oof_trend: pd.DataFrame,
+    oof_regime: pd.DataFrame,
+    classifier_name: str = "lda",
+    n_trials: int = 20,
+    save_model: bool = True,
+    step_months: int | None = None,
+    min_train_months: int | None = None,
+) -> dict:
+    """
+    Optuna walk-forward HP search for Stage 3, then retrain with best params.
+
+    Stage 3 input = oscillator features + Stage 1 OOF trend probs + Stage 2 OOF
+    regime posterior. The OOF inputs are passed in already (do not re-compute here).
+    """
+    from src.models.optuna_helpers import tune_classifier_walk_forward
+
+    config = cfg()
+
+    common_idx = (
+        X_oscillator.index
+        .intersection(y_signal.index)
+        .intersection(oof_trend.index)
+        .intersection(oof_regime.index)
+    )
+    X_combined = pd.concat(
+        [X_oscillator.loc[common_idx], oof_trend.loc[common_idx], oof_regime.loc[common_idx]],
+        axis=1,
+    )
+    y = y_signal.loc[common_idx]
+
+    folds = expanding_window_walk_forward(
+        X_combined, y,
+        min_train_months=min_train_months or config["training"]["min_train_window_months"],
+        step_months=step_months or config["training"]["walk_forward_step_months"],
+    )
+
+    best_params, study = tune_classifier_walk_forward(
+        X_combined, y, classifier_name,
+        folds=folds,
+        n_trials=n_trials,
+        study_name=f"stage3_{classifier_name}",
+        timeout_seconds=600 if classifier_name.lower() == "mlp" else None,
+    )
+    logger.info(f"Stage 3 best params ({classifier_name}): {best_params}")
+
+    result = train_stage3(
+        X_oscillator.loc[common_idx],
+        y, oof_trend.loc[common_idx], oof_regime.loc[common_idx],
+        classifier_name, params=best_params, save_model=save_model,
+        step_months=step_months, min_train_months=min_train_months,
+    )
+    result["best_params"] = best_params
+    result["optuna_study"] = study
+    return result
+
+
 def train_stage3(
     X_oscillator: pd.DataFrame,
     y_signal: pd.Series,
@@ -147,6 +206,8 @@ def train_stage3(
     classifier_name: str = "xgboost",
     params: dict | None = None,
     save_model: bool = True,
+    step_months: int | None = None,
+    min_train_months: int | None = None,
 ) -> dict:
     """
     Train Stage 3 signal classifier using oscillator features + OOF predictions.
@@ -198,11 +259,11 @@ def train_stage3(
         f"classes={y.unique().tolist()}"
     )
 
-    # Walk-forward folds
+    # Walk-forward folds (CLI/script can override step/min)
     folds = expanding_window_walk_forward(
         X_combined, y,
-        min_train_months=config["training"]["min_train_window_months"],
-        step_months=config["training"]["walk_forward_step_months"],
+        min_train_months=min_train_months or config["training"]["min_train_window_months"],
+        step_months=step_months or config["training"]["walk_forward_step_months"],
     )
 
     n_classes = len(y.unique())
