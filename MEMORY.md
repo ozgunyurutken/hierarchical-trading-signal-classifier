@@ -512,3 +512,117 @@ Iter 4 sonuçları `v1.0-iter4-final` annotated tag'ı ile mühürlendi (commit 
 - `v2/eth-pipeline` — Konu D (opsiyonel)
 
 İkisi paralel ilerlerken sonra entegrasyon: A ve B'den çıkan sonuçlar farklı veri kümeleri kullanır, dolayısıyla "B verisi üzerinde A ablation'ı" ek bir entegrasyon iterasyonu (v2.1) gerektirebilir. Final v2 sonuçları için `v3.0-final` tag'ı atılır.
+
+## v2 Deney Sonuçları (2026-05-08, akşam)
+
+### v2/ablation — 4 konfigürasyon × XGBoost, v1 verisi (462 gün test)
+Branch HEAD: `a8f0cb2`. Aynı veri/aynı fold/aynı Optuna bütçesi, sadece feature subset değişiyor.
+
+| Config | n_feat | Acc | F1 | MCC | Return | **Sharpe** | MaxDD | Win% |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **A1 Flat (1-stage)** | 29 | 0.388 | 0.256 | **0.117** | +41.2% | **1.43** | -11.4% | **90.9%** |
+| A2 2-stage Trend | 32 | 0.381 | 0.249 | 0.093 | +31.9% | 1.10 | -12.0% | 72.7% |
+| A3 2-stage Macro | 32 | 0.385 | 0.251 | 0.112 | +32.7% | 1.16 | -11.4% | 75.0% |
+| A4 3-stage Full | 35 | 0.383 | 0.253 | 0.093 | **+42.7%** | 1.35 | -11.4% | 84.6% |
+| Buy & Hold | - | - | - | - | +47.6% | 0.75 | -32.1% | - |
+
+**Bulgu:** A1 Flat 4 metrikten 3'ünde lider (Sharpe, MCC, Win%). A4 sadece +1.5pp Return marjında önde. Tek stage eklemek (A2 / A3) flat'tan KÖTÜLEŞTİRİYOR — hiyerarşinin orta kısmı bilgi taşımıyor, gürültü ekliyor.
+
+### v2/bigger-dataset — Veri 2014-09 → 2013-02 genişletildi (+577 satır)
+Branch HEAD: `8c70929`. CryptoCompare REST API ile 2010-07 → 2014-09 arası BTC OHLCV çekildi (1,523 ek gün), yfinance ile %0.62 mean overlap deviation (kabul edilebilir). 2013-02-15'ten itibaren tüm makro asset (12 yfinance + 1 FRED daily DGS2 + 5 FRED monthly) yeniden çekildi. Yeni aligned: 4,538 sat × 22 kol (v1: 3,961 × 22).
+
+#### Tüm 7 model retrain → tümü v1'e göre KÖTÜLEŞTİ
+
+| Model | v1 Sharpe | v2-bigger Sharpe | Δ |
+|---|---:|---:|---:|
+| LDA      | -0.78 |  0.00 (no trade) | +0.78 |
+| MLP      | +1.33 | +0.40 | -0.93 |
+| **XGB**  | +1.35 | **+0.69** | -0.66 |
+| LGBM     | +1.06 | +0.40 | -0.66 |
+| RF       | +1.25 | +0.02 | -1.23 |
+| ZZ-XGB   | +1.33 | +0.42 | -0.91 |
+| ZZ-MLP   | +0.95 | -0.77 | **-1.72** |
+| **B&H**  | +0.75 | **+0.53** | -0.22 |
+
+7/7 model kötüleşti. Sadece XGB B&H Sharpe'ı geçti (0.69 vs 0.53). v1'de 5/7 model B&H'ı geçiyordu. Olası sebepler:
+- 2013-2018 dönemi farklı rejim profilleri (2014-15 crypto winter, 2018 bear) içeriyor
+- Adaptive volatility threshold'u tüm tarih boyunca calibrate edildi → 2024-25 bull dönemine özel kalibrasyon kayboldu
+- Test penceresi 3 ay erken başladı (2024-09 → 2024-06), 2024-06 → 09 sideways consolidation modelleri zorladı
+
+#### Aynı ablation 4 konfig v2-bigger verisi üzerinde tekrar (533 gün test)
+
+| Config | Acc | F1 | MCC | Return | **Sharpe** | MaxDD | Win% |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **A1 Flat** | 0.388 | 0.259 | 0.089 | **+33.5%** | **0.84** ★ | -17.4% | **68.4%** |
+| A2 2-stage T | 0.392 | 0.272 | 0.082 | +29.3% | 0.72 | -18.0% | 53.8% |
+| A3 2-stage M | 0.383 | 0.253 | 0.072 | +26.6% | 0.70 | -18.5% | 55.0% |
+| A4 3-stage F | 0.394 | 0.270 | 0.093 | +26.8% | 0.69 | -18.6% | 60.0% |
+| B&H | - | - | - | +31.8% | 0.53 | -32.1% | - |
+
+**Bulgu güçlendi:** Sharpe **MONOTON azalan** A1 > A2 > A3 > A4. A1 vs A4 farkı +0.08 (v1) → +0.15 (v2-bigger), iki katına çıktı. A1, B&H Return'ünü geçen TEK model. Sıralama 2 farklı dataset/test window/training era kombinasyonunda aynı → **robust bulgu**.
+
+#### Üretilen artifact'lar (v2 deneyleri)
+- `data/raw/btc_extended_history.csv` (2010-07 → 2025-12, 5,484 sat) — gitignored
+- `data/processed/btc_aligned_v2.csv` (4,538 × 22)
+- `data/processed/btc_features_stage3_v2_bigger.csv`, `btc_features_macro_bigger.csv`
+- `data/labels/btc_signal_labels_adaptive_bigger.csv`, `btc_stage1_oof_lda_bigger.csv`, `btc_stage1_oof_lda_zigzag_bigger.csv`, `btc_oof_regime_posterior_bigger.csv`
+- `data/labels/btc_stage3_bigger_full_summary.csv`, `btc_test_signals_bigger.csv`, `btc_backtest_bigger_summary.csv`, `final_iter5_summary_bigger.csv`
+- `data/labels/btc_ablation_v2_summary.csv`, `btc_ablation_v2_bigger_summary.csv`
+- `reports/ablation_v2_comparison.png`, `ablation_v2_equity.png`, `ablation_v2_bigger_comparison.png`, `ablation_v2_bigger_equity.png`, **`ablation_v1_vs_bigger.png`**
+- `scripts/fetch_cryptocompare_btc.py`, `build_aligned_v2.py`, `rerun_v2_bigger_dataset.py`, `run_ablation_v2.py`, `run_ablation_v2_bigger.py`, `plot_ablation_v1_vs_bigger.py`
+
+## v2.1 Yol Haritası — Hiyerarşik Yapıyı Kurtaracak Ek Deneyler
+
+Ablation negatif bulgu **ham haliyle alınmamalı** — kök sebep büyük ihtimalle Stage 3'e verdiğimiz feature set'in yapısal sorunu. Aşağıdaki olası sebepler ve çözümler:
+
+### Olası kök sebepler
+
+1. **Feature redundancy.** Stage 3'e verilen 29 teknik feature'ın çoğu zaten trend/regime bilgisini implicitly taşıyor:
+   - `above_sma_200`, `log_ret_50`, `log_ret_100`, `sharpe_proxy_20d`, `adx_value`, `adx_strong_trend`, `higher_high_count` → bunlar zaten **trend göstergeleri**, Stage 1 SMA cross OOF'ı ile collinear
+   - `bollinger_pct_b`, `atr_*`, `volume_zscore_*` → bunlar zaten **volatility regime** göstergeleri, Stage 2 GMM (VIX, credit spread, SP500/VIX) bilgisiyle collinear
+   - Sonuç: A4'e eklediğimiz s1 (3 col) + s2 (3 col) **redundant**, XGB tree split'leri arasında bilgi paylaşımı oluşmuyor.
+
+2. **Soft fusion kanalının az bilgi taşıması.** Stage 1 LDA OOF posterior'ı ve Stage 2 GMM OOF posterior'ı sadece 3+3=6 kolon ekliyor. Tree splitleri için 6 ek kolon, 29 mevcut kolon yanında **marjinal düzen değişikliği** sağlıyor. **Soft fusion yerine hard interaction features** (örn. `tech_feature_X × P(Up)`, `RSI × P(Stress)`) eklenirse, non-linear etkileşimler explicit olur.
+
+3. **OOF posterior leakage olasılığı (sıfır değil).** Stage 1 SMA cross etiketi tech features'tan üretildi (SMA cross zaten tech feature). Stage 1 model bu etiketi öngörmek için tech features kullandı. Stage 3'e bu OOF posterior'ı geri verince **döngüsel referans** oluşuyor (label leakage değil ama feature-target tautoloji türevi).
+
+### v2/feature-selection — Önerilen Roadmap
+
+#### A. Redundancy elimination (öncelikli)
+1. Mutual Information / SHAP feature importance ranking yap, Stage 3 v2 features (29 col) içinde redundant olanları çıkar
+2. **Feature subset stratejileri:**
+   - **B1:** "Stage 3'e sadece **oscillator + volatility** ver" (trend ve regime bilgisi sadece s1/s2 üzerinden gelsin) — 12-15 feature
+   - **B2:** "Tüm 29 feature − 7 trend-related" + s1 + s2 — 22 + 3 + 3 = 28 feature
+   - **B3:** Mutual Information top-15 + s1 + s2 — 21 feature
+3. Her subset için XGB ablation tekrar (A1-A4 dört konfig)
+4. Eğer hierarchic A4 > flat A1 olursa: hipotez doğrulandı, hiyerarşik mimari **gerçekten yardımcı** ama redundant feature'larla maskelenmişti.
+
+#### B. Interaction features (sonraki adım)
+- `tech_feature × P(s1_class)` çapraz feature'lar (örn. `RSI × P_Up`, `MACD × P_Calm`)
+- `tech_feature × P(s2_class)` (örn. `Bollinger_pct × P_Stress`)
+- 29 × 3 + 29 × 3 = 174 ek feature → Optuna ile en iyi 20-30 seç
+- Tree splitleri non-linear çarpımları direkt kullanır → s1/s2'nin gerçek information value görünür hale gelir
+
+#### C. Hard fusion alternatifi
+- Soft posterior yerine **hard label** kullan: `s1_label = argmax(p̂_trend)` → kategorik feature
+- XGB için one-hot encoded {Up, Down, Flat} × {Calm, Trans, Stress} = 9 kategorik feature
+- 9 feature + 29 tech = 38 toplam, ama her birinin XGB için "regime bucket" olarak değeri yüksek
+
+#### D. Stage 1 / Stage 2 hard label evaluation
+- **Trend label kalitesi:** SMA cross etiketi tautoloji yaratıyor, ZigZag causal değişim açıkladı; ama ZigZag de v2-bigger'da kötüleşti. Belki **Stage 1'i tamamen kaldırıp** sadece Stage 2 (macro regime) + Stage 3 ile dene → ablation bulgusu A3 (macro-only) Sharpe 0.70, A1 (flat) 0.84 farkı 0.14, gerçek bilgi var ama dominant değil.
+- **Macro feature küme yenileme:** Şu an 11 makro Stage 2 feature'ında 8 derived + 3 raw. SHAP / GMM cluster purity ile değerlendir, gereksiz olanları çıkar (4-5 core feature kalsın).
+
+### v2/feature-selection branch
+- v1.0-iter4-final tag'ından branch et → `v2/feature-selection`
+- B1 → B2 → B3 sırasıyla 3 alt-deney koştur
+- Her birinin sonucunu `data/labels/btc_ablation_fs_*_summary.csv` olarak kaydet
+- En iyi konfig için Stage 3 7 model retrain
+- v2-bigger test setinde de tekrarla (robustness)
+
+### Karar noktası
+- Eğer A4 (full hierarchical) feature selection sonrası A1'i geçerse → **tezi destekleyen sonuç**, rapor "feature redundancy hidden the hierarchical advantage; after careful selection, 3-stage outperforms flat by Δ Sharpe X" şeklinde yazılır.
+- Hiçbir feature subset'te A4 > A1 ise → tez gerçekten zayıf, rapor "honest negative finding" framework ile yazılır.
+
+### Şimdilik askıda kalan
+- Notebook 04+07+08 refresh (Konu C v2/notebook-refresh) — feature selection sonrası yapılacak
+- ETH pipeline (Konu D v2/eth-pipeline) — opsiyonel, deadline buffer'a göre
