@@ -77,10 +77,14 @@ def plot_overview(btc, eth, out: Path):
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     axes[-1].set_xlabel("Tarih")
 
-    fig.suptitle(f"V5 Aligned Dataset Overview — BTC + ETH {btc.index.min().date()} → {btc.index.max().date()}\n"
-                 f"Train 70% ({2031}d)  ·  Val 15% ({435}d)  ·  Test 15% ({436}d)  ·  "
-                 f"chronological split (no shuffle)",
-                 fontsize=11.5, fontweight="bold", y=0.995)
+    n_btc = len(btc); n_eth = len(eth)
+    n_btc_tr = int(n_btc * TRAIN_FRAC); n_btc_v = int(n_btc * VAL_FRAC); n_btc_te = n_btc - n_btc_tr - n_btc_v
+    n_eth_tr = int(n_eth * TRAIN_FRAC); n_eth_v = int(n_eth * VAL_FRAC); n_eth_te = n_eth - n_eth_tr - n_eth_v
+    fig.suptitle(f"V5 Aligned Dataset Overview — BTC ({n_btc}d, {btc.index.min().date()}→) + "
+                 f"ETH ({n_eth}d, {eth.index.min().date()}→) → 2025-12\n"
+                 f"BTC train/val/test: {n_btc_tr}/{n_btc_v}/{n_btc_te}d  ·  "
+                 f"ETH train/val/test: {n_eth_tr}/{n_eth_v}/{n_eth_te}d  ·  chronological 70/15/15",
+                 fontsize=11, fontweight="bold", y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)

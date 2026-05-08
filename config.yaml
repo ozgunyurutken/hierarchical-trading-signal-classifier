@@ -12,20 +12,23 @@ project:
 # 1. DATA
 # ============================================================
 data:
-  # 13 karar #1: 2018-01 → 2025-12 ("modern BTC era", post-2017 bull peak)
-  start_date: "2018-01-01"
+  # V5+ (2026-05-08 onaylandı): Geniş tarih aralığı, asimetrik per-coin start.
+  # BTC 2014-09-17 (yfinance native), ETH 2017-11-09 (yfinance native).
+  # 2017 bull peak + 2018 bear cycle dahil, daha çok train data.
+  # Stawarz 2025 [N19] ile yakın baseline (2015-2024).
+  start_date: "2014-09-17"
   end_date: "2025-12-31"
 
   symbols:
     BTC-USD:
-      start_date: "2018-01-01"
+      start_date: "2014-09-17"
       label: "BTC"
     ETH-USD:
-      start_date: "2018-01-01"
+      start_date: "2017-11-09"   # yfinance native start
       label: "ETH"
 
-  # macro 2017-01 başlangıç (1-yıl warm-up rolling z-score için)
-  macro_start_date: "2017-01-01"
+  # Macro 2013-01-01: ~1.5 yıl warm-up + FRED daily DGS2 (2013'ten itibaren)
+  macro_start_date: "2013-01-01"
 
   # Timezone alignment
   macro_lag_days: 1
