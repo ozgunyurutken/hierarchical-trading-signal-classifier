@@ -84,14 +84,24 @@ def shade_clusters(ax, dates, semantic_hard):
 
 
 def main() -> None:
-    btc = pd.read_csv(PROJECT_ROOT / "data" / "processed" / "btc_aligned.csv",
-                      index_col=0, parse_dates=True)
-    s2 = pd.read_csv(PROJECT_ROOT / "data" / "labels" / "btc_oof_regime_posterior.csv",
-                     index_col=0, parse_dates=True)
-    common = btc.index.intersection(s2.index)
-    btc = btc.loc[common]; s2 = s2.loc[common]
+    PLOT_START = "2018-01-01"  # 2017 bull peak sonrası — "modern BTC era"
 
-    idx_to_name, semantic_hard, stats = relabel_clusters(s2, btc)
+    btc_full = pd.read_csv(PROJECT_ROOT / "data" / "processed" / "btc_aligned.csv",
+                           index_col=0, parse_dates=True)
+    s2_full = pd.read_csv(PROJECT_ROOT / "data" / "labels" / "btc_oof_regime_posterior.csv",
+                          index_col=0, parse_dates=True)
+    common_full = btc_full.index.intersection(s2_full.index)
+    btc_full = btc_full.loc[common_full]; s2_full = s2_full.loc[common_full]
+
+    # Cluster semantic mapping: tüm veriye göre yap (stability), sonra slice et
+    idx_to_name, semantic_hard_full, stats = relabel_clusters(s2_full, btc_full)
+    # Apply plot window
+    plot_mask = btc_full.index >= PLOT_START
+    btc = btc_full.loc[plot_mask]
+    s2 = s2_full.loc[plot_mask]
+    semantic_hard = semantic_hard_full[np.asarray(plot_mask)]
+    print(f"Plot window: {btc.index.min().date()} → {btc.index.max().date()}  "
+          f"({len(btc)} days)")
     print(f"Cluster mapping (raw idx → semantic):  {idx_to_name}")
     for name in ORDER:
         s = stats[name]
