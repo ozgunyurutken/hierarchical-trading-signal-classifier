@@ -88,25 +88,29 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
     fig, axes = plt.subplots(4, 1, figsize=(15, 13), sharex=True,
                              gridspec_kw={"height_ratios": [1, 1, 1, 1]})
 
-    # 0. Pre-train multi-asset context (S&P + VIX + BTC) + regime shading
+    # 0. Pre-train context — S&P 500 (left, linear) + VIX z-score (right twin)
     raw_dir = PROJECT_ROOT / "data" / "raw"
+    proc_dir = PROJECT_ROOT / "data" / "processed"
     sp500 = pd.read_csv(raw_dir / "v5_macro_risk.csv",
                         index_col=0, parse_dates=True)["SP500"].dropna()
-    vix = pd.read_csv(raw_dir / "v5_macro_risk.csv",
-                      index_col=0, parse_dates=True)["VIX"].dropna()
+    derived = pd.read_csv(proc_dir / "macro_derived_pretrain_v5.csv",
+                          index_col=0, parse_dates=True)
+    vix_z = derived["VIX_zscore_long"].dropna()
     ax = axes[0]
     _shade(ax, pd.Series(np.nan, index=pre_r.index),
            pre_r["regime_label"], log=False, lw=0)
-    ax.semilogy(sp500.index, sp500.values, color="#1f77b4", lw=0.9, label="S&P 500 (left)")
-    ax.semilogy(btc_close.index, btc_close.values, color="#f7931a", lw=0.8,
-                label="BTC (left, post-2014)")
-    ax.set_ylabel("S&P / BTC (log)")
+    ax.plot(sp500.index, sp500.values, color="#1f77b4", lw=0.9, label="S&P 500 (left, linear)")
+    ax.set_ylabel("S&P 500", color="#1f77b4")
+    ax.tick_params(axis="y", labelcolor="#1f77b4")
     ax2 = ax.twinx()
-    ax2.plot(vix.index, vix.values, color="#d62728", lw=0.7, alpha=0.8, label="VIX (right)")
-    ax2.set_ylabel("VIX", color="#d62728")
+    ax2.plot(vix_z.index, vix_z.values, color="#d62728", lw=0.7, alpha=0.8,
+             label="VIX z-score long (right)")
+    ax2.axhline(0, color="#d62728", ls=":", lw=0.4, alpha=0.5)
+    ax2.axhline(2, color="#d62728", ls="--", lw=0.4, alpha=0.5)
+    ax2.set_ylabel("VIX z-score (25-yıl baseline)", color="#d62728")
     ax2.tick_params(axis="y", labelcolor="#d62728")
     ax2.grid(False); ax2.spines["top"].set_visible(False)
-    ax.set_title("Pre-train multi-asset context (2000-2025) — S&P + VIX + BTC + regime shading",
+    ax.set_title("Pre-train context (2000-2025) — S&P 500 (linear) + VIX z-score + regime shading",
                  fontsize=10, fontweight="bold")
     lines1, labs1 = ax.get_legend_handles_labels()
     lines2, labs2 = ax2.get_legend_handles_labels()
