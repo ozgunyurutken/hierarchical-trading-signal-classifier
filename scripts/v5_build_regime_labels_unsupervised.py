@@ -1,27 +1,24 @@
 """
-V5 Phase 2.3 — Sparse K-Means k=3 (Witten & Tibshirani 2010 [LR1]).
+V5 Phase 2.2 — Saf K-Means k=3 + Anchor Validation (no constraints).
 
-Phase 2.2'de saf K-Means denendi → FFR_change_60d feature 2022 Fed hike
-döneminde extreme z-score (+2.98) outlier oluşturduğu için cluster yapısını
-domine etti (Risk-Off cluster'ı tek başına 2022 capture etti, COVID/GFC
-Neutral'a düştü).
+Anchor mekanizmasi training'den çıkarıldı (Phase 2.1'in must-link constraint
+yaklaşımı leak ürettiği için). Bunun yerine:
 
-Sparse K-Means çözümü:
-  - L1-penalized feature weight w_j ∈ [0,1] iteratif öğrenilir
-  - Algoritma extreme outlier feature'a düşük weight verebilir
-  - Hyperparameter scan: s ∈ {1.5, sqrt(p)/2, sqrt(p)/1.5, sqrt(p)/1.2, sqrt(p)*0.95}
-  - Best s seçimi: Risk-Off cluster ~12% target balance (5-25% kabul edilebilir)
+  - K-Means saf fit (constraint yok)
+  - Cluster → semantic label mapping centroid VIX/SP500 ortalamasıyla
+  - 8 crisis anchor period'u POST-HOC diagnostics olarak raporda gösterilir
 
-Anchor mekanizmasi training'e DAHIL DEĞIL — 8 crisis period'u POST-HOC
-diagnostics olarak raporda gösterilir.
+Literatur:
+  - Hamilton-Susmel 1994 — 3-state SWARCH (low/high/extreme volatility)
+  - Bouri-Vo-Saeed 2020 — 3-regime BTC volatility classification
+  - Hamilton 1989 [6] — 2-state HMM klasiği
 
 Outputs:
-  data/processed/{btc,eth,macro_pretrain}_regime_labels_sparse_v5.csv
-  reports/Phase2/v5_p2.3_sparse_centroids.png
-  reports/Phase2/v5_p2.3_sparse_feature_weights.png
-  reports/Phase2/v5_p2.3_sparse_timeline.png
-  reports/Phase2/v5_p2.3_sparse_distribution.png
-  reports/Phase2/v5_p2.3_sparse_diagnostics.json
+  data/processed/{btc,eth,macro_pretrain}_regime_labels_unsupervised_v5.csv
+  reports/Phase2/v5_p2.2_unsupervised_centroids.png
+  reports/Phase2/v5_p2.2_unsupervised_timeline.png
+  reports/Phase2/v5_p2.2_unsupervised_distribution.png
+  reports/Phase2/v5_p2.2_unsupervised_diagnostics.json
 """
 from __future__ import annotations
 
@@ -39,7 +36,7 @@ import pandas as pd
 from matplotlib.patches import Patch
 
 from src.labels.v5_regime_labels import (
-    SemanticSparseKMeans, STAGE2_FEATURES, REGIME_LABELS, CRISIS_DATE_RANGES,
+    SemanticKMeans, STAGE2_FEATURES, REGIME_LABELS, CRISIS_DATE_RANGES,
 )
 
 plt.rcParams.update({"figure.dpi": 130, "font.size": 10,
@@ -52,8 +49,9 @@ REGIME_COLORS = {"Risk-On": "#7ec27e", "Risk-Off": "#e07e7e", "Neutral": "#f0c87
 def _shade_anchors(ax, crisis_ranges=CRISIS_DATE_RANGES):
     """Subplot height boyu silik darkred fill + başlangıç/bitiş dashed çizgileri.
 
-    Phase 2.2+ anchor visualization: renkler üst üste gözüksün, anchor
-    başlangıç ve bitiş tarihleri net olsun."""
+    Kullanıcı isteği (Phase 2.2): renkler üst üste gözüksün, anchor başlangıç
+    ve bitiş tarihleri net olsun. axvspan alpha=0.10 (silik) + axvline alpha=0.6
+    (net sınır)."""
     for start, end, _label in crisis_ranges:
         s, e = pd.Timestamp(start), pd.Timestamp(end)
         ax.axvspan(s, e, color="darkred", alpha=0.10, zorder=0)
@@ -62,6 +60,7 @@ def _shade_anchors(ax, crisis_ranges=CRISIS_DATE_RANGES):
 
 
 def _shade_regimes(ax, price, regime, log=False, lw=1.0):
+    """Regime band shading (Risk-On yeşil / Neutral sarı / Risk-Off açık kırmızı)."""
     if log:
         ax.semilogy(price.index, price.values, color="black", lw=lw, zorder=3)
     else:
@@ -83,30 +82,6 @@ def _shade_regimes(ax, price, regime, log=False, lw=1.0):
                    alpha=0.25, lw=0, zorder=2)
 
 
-def plot_feature_weights(model, out: Path):
-    weights = model.feature_weights_summary()
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.barh(range(len(weights)), weights.values, color="C0",
-            edgecolor="black", lw=0.5)
-    ax.set_yticks(range(len(weights)))
-    ax.set_yticklabels(weights.index, fontsize=10)
-    ax.invert_yaxis()
-    ax.set_xlabel("Learned weight w_j (||w||_2 = 1, ||w||_1 ≤ s)")
-    ax.axvline(1 / np.sqrt(len(weights)), color="red", ls="--", lw=0.8,
-               label=f"Uniform baseline 1/√p = {1/np.sqrt(len(weights)):.3f}")
-    for i, v in enumerate(weights.values):
-        ax.text(v + 0.005, i, f"{v:.3f}", va="center", fontsize=9)
-    ax.set_title(f"V5 Phase 2.3 — Sparse K-Means Learned Feature Weights\n"
-                 f"L1 bound s={model.s_:.3f} (max √p={np.sqrt(len(weights)):.2f}); "
-                 f"weight≈0 → feature dropped",
-                 fontsize=11, fontweight="bold")
-    ax.legend(fontsize=9)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
-
-
 def plot_centroids(model, out: Path):
     cent = model.centroid_summary()
     fig, ax = plt.subplots(figsize=(13, 6.5))
@@ -119,9 +94,8 @@ def plot_centroids(model, out: Path):
     ax.set_xticks(x)
     ax.set_xticklabels(STAGE2_FEATURES, rotation=20, ha="right", fontsize=9)
     ax.set_ylabel("Centroid value (original units)")
-    ax.set_title(f"V5 Phase 2.3 — Sparse K-Means Centroids per Regime\n"
-                 f"Witten & Tibshirani 2010 [LR1] L1-weighted clustering, "
-                 f"best s={model.s_:.3f}",
+    ax.set_title("V5 Phase 2.2 — Pure K-Means k=3 Centroids per Regime\n"
+                 "Saf K-Means (constraint yok), semantic label centroid VIX/SP500'den",
                  fontsize=11.5, fontweight="bold")
     ax.legend(loc="best", fontsize=10)
     fig.tight_layout()
@@ -171,14 +145,14 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
     _shade_anchors(axes[1])
     _shade_regimes(axes[1], btc_close, btc_r["regime_label"], log=True, lw=1.0)
     axes[1].set_ylabel("BTC (log)")
-    axes[1].set_title("BTC + Sparse K-Means regime + anchor periods",
+    axes[1].set_title("BTC + Pure K-Means regime + anchor periods",
                       fontsize=10, fontweight="bold")
 
     # Panel 2 — ETH
     _shade_anchors(axes[2])
     _shade_regimes(axes[2], eth_close, eth_r["regime_label"], log=True, lw=1.0)
     axes[2].set_ylabel("ETH (log)")
-    axes[2].set_title("ETH + Sparse K-Means regime + anchor periods",
+    axes[2].set_title("ETH + Pure K-Means regime + anchor periods",
                       fontsize=10, fontweight="bold")
 
     # Panel 3 — pretrain regime band only
@@ -197,8 +171,8 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
                          label="Crisis anchor periods (validation only)"))
     fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=10,
                bbox_to_anchor=(0.5, -0.005))
-    fig.suptitle("V5 Phase 2.3 — Sparse K-Means k=3 Regime Timeline "
-                 "(L1 feature-weighted, anchors = post-hoc validation)",
+    fig.suptitle("V5 Phase 2.2 — Pure K-Means k=3 Regime Timeline "
+                 "(anchors = post-hoc validation)",
                  fontsize=12, fontweight="bold", y=0.998)
     fig.tight_layout(rect=[0, 0.025, 1, 0.96])
     fig.savefig(out, bbox_inches="tight")
@@ -220,7 +194,7 @@ def plot_distribution(btc_r, eth_r, pre_r, out: Path):
                edgecolor="black", lw=0.5)
     ax.set_xlabel("% of days")
     ax.set_xlim(0, 100)
-    ax.set_title("V5 Phase 2.3 — Sparse K-Means Regime Distribution",
+    ax.set_title("V5 Phase 2.2 — Pure K-Means Regime Distribution",
                  fontsize=12, fontweight="bold")
     for i, period in enumerate(pivot.index):
         cum = 0
@@ -237,7 +211,11 @@ def plot_distribution(btc_r, eth_r, pre_r, out: Path):
 
 
 def compute_anchor_diagnostics(pre_r) -> list[dict]:
-    """Her anchor period için cluster oranlarını hesapla (post-hoc validation)."""
+    """Her anchor period için cluster oranlarını hesapla (post-hoc validation).
+
+    Beklenti: yüksek-VIX dönemleri saf K-Means ile doğal olarak Risk-Off
+    cluster'ına düşer. %100 zorunluluk yok — örn. 2022 hike monetary tightening
+    olduğu için Neutral'a düşmesi konseptüel olarak doğru."""
     rows = []
     for start, end, label in CRISIS_DATE_RANGES:
         s, e = pd.Timestamp(start), pd.Timestamp(end)
@@ -269,7 +247,7 @@ def print_anchor_diagnostics(rows: list[dict]):
 
 
 def main():
-    print("V5 Phase 2.3 — Sparse K-Means k=3 (Witten-Tibshirani 2010 [LR1])")
+    print("V5 Phase 2.2 — Saf K-Means k=3 + Anchor Validation")
     print("=" * 70)
     proc = PROJECT_ROOT / "data" / "processed"
     reports = PROJECT_ROOT / "reports"
@@ -280,63 +258,30 @@ def main():
     btc = pd.read_csv(proc / "btc_aligned_v5.csv", index_col=0, parse_dates=True)
     eth = pd.read_csv(proc / "eth_aligned_v5.csv", index_col=0, parse_dates=True)
 
-    p = len(STAGE2_FEATURES)
-    sqrt_p = np.sqrt(p)
-    print(f"\np={p} features, max ||w||_1 = sqrt(p) = {sqrt_p:.3f}")
-
-    # Hyperparameter scan
-    print(f"\n[1] Hyperparameter scan: best s by Risk-Off balance")
-    s_candidates = [1.5, sqrt_p / 2, sqrt_p / 1.5, sqrt_p / 1.2, sqrt_p * 0.95]
-    best_model = None
-    best_balance = -np.inf
-    best_s = None
-
-    for s in s_candidates:
-        m = SemanticSparseKMeans(n_clusters=3, s=s, random_state=42).fit(pretrain)
-        pre_r_tmp = m.predict(pretrain)
-        counts = pre_r_tmp["regime_label"].value_counts(normalize=True)
-        risk_off_pct = counts.get("Risk-Off", 0) * 100
-        # Score: target Risk-Off ~12%, accept 5-25% range
-        if 5 <= risk_off_pct <= 25:
-            balance_score = 100 - abs(risk_off_pct - 12)
-        else:
-            balance_score = -abs(risk_off_pct - 12)
-        weights = m.feature_weights_summary()
-        nz = (weights > 0.01).sum()
-        print(f"  s={s:.3f}  Risk-Off={risk_off_pct:.1f}%  "
-              f"active features={nz}/{p}  balance_score={balance_score:.1f}")
-        if balance_score > best_balance:
-            best_balance = balance_score
-            best_model = m
-            best_s = s
-
-    print(f"\n  Best s = {best_s:.3f} (balance_score={best_balance:.1f})")
-    print(f"\n[2] Best model summary")
-    print(f"  cluster → regime: {best_model.cluster_to_regime_}")
-    print(f"\nFeature weights (sorted desc):")
-    print(best_model.feature_weights_summary().round(4).to_string())
+    print(f"\n[1] Fit Pure K-Means k=3 (no constraints, vanilla sklearn)")
+    model = SemanticKMeans(n_clusters=3, random_state=42).fit(pretrain)
+    print(f"  cluster → regime: {model.cluster_to_regime_}")
     print(f"\nCentroids (original units):")
-    print(best_model.centroid_summary().round(3).to_string())
+    print(model.centroid_summary().round(3).to_string())
 
-    plot_centroids(best_model, reports / "Phase2" / "v5_p2.3_sparse_centroids.png")
-    plot_feature_weights(best_model, reports / "Phase2" / "v5_p2.3_sparse_feature_weights.png")
+    plot_centroids(model, reports / "Phase2" / "v5_p2.2_unsupervised_centroids.png")
 
-    print(f"\n[3] Inference (BTC/ETH via pretrain reindex — weekend ffill)")
-    pre_r = best_model.predict(pretrain)
+    print(f"\n[2] Inference (BTC/ETH via pretrain reindex — weekend ffill)")
+    pre_r = model.predict(pretrain)
     btc_r = pre_r.reindex(btc.index, method="ffill")
     eth_r = pre_r.reindex(eth.index, method="ffill")
-    pre_r.to_csv(proc / "macro_pretrain_regime_labels_sparse_v5.csv")
-    btc_r.to_csv(proc / "btc_regime_labels_sparse_v5.csv")
-    eth_r.to_csv(proc / "eth_regime_labels_sparse_v5.csv")
+    pre_r.to_csv(proc / "macro_pretrain_regime_labels_unsupervised_v5.csv")
+    btc_r.to_csv(proc / "btc_regime_labels_unsupervised_v5.csv")
+    eth_r.to_csv(proc / "eth_regime_labels_unsupervised_v5.csv")
     print(f"  saved 3 CSV files in data/processed/")
 
-    print(f"\n[4] Plots")
+    print(f"\n[3] Plots")
     plot_timeline(btc["Close"].loc[btc_r.index],
                   eth["Close"].loc[eth_r.index],
                   btc_r, eth_r, pre_r,
-                  reports / "Phase2" / "v5_p2.3_sparse_timeline.png")
+                  reports / "Phase2" / "v5_p2.2_unsupervised_timeline.png")
     plot_distribution(btc_r, eth_r, pre_r,
-                      reports / "Phase2" / "v5_p2.3_sparse_distribution.png")
+                      reports / "Phase2" / "v5_p2.2_unsupervised_distribution.png")
 
     print("\n" + "=" * 70)
     print("Distribution:")
@@ -359,16 +304,12 @@ def main():
     print_anchor_diagnostics(anchor_diag)
 
     diagnostics = {
-        "phase": "V5 Phase 2.3 — Sparse K-Means k=3 (Witten-Tibshirani 2010)",
-        "method": "L1-penalized weighted K-Means",
+        "phase": "V5 Phase 2.2 — Pure K-Means k=3 + Anchor Validation",
+        "method": "sklearn.cluster.KMeans (no constraints)",
         "n_clusters": 3,
         "random_state": 42,
-        "l1_bound_s_best": float(best_s),
-        "l1_bound_max_sqrt_p": float(sqrt_p),
-        "n_outer_iter": int(best_model.n_outer_iter),
-        "feature_weights": best_model.feature_weights_summary().round(6).to_dict(),
-        "cluster_to_regime": {int(k): v for k, v in best_model.cluster_to_regime_.items()},
-        "centroids_original_units": best_model.centroid_summary().round(4).to_dict(),
+        "cluster_to_regime": {int(k): v for k, v in model.cluster_to_regime_.items()},
+        "centroids_original_units": model.centroid_summary().round(4).to_dict(),
         "distribution_pct": distribution,
         "anchor_diagnostics": anchor_diag,
         "anchor_validation_summary": {
@@ -379,11 +320,11 @@ def main():
                 [r["risk_off_pct"] for r in anchor_diag])) if anchor_diag else 0.0,
         },
     }
-    diag_path = reports / "Phase2" / "v5_p2.3_sparse_diagnostics.json"
+    diag_path = reports / "Phase2" / "v5_p2.2_unsupervised_diagnostics.json"
     with open(diag_path, "w") as f:
         json.dump(diagnostics, f, indent=2)
     print(f"\n  saved: {diag_path.relative_to(PROJECT_ROOT)}")
-    print("\nV5 Phase 2.3 complete.")
+    print("\nV5 Phase 2.2 complete.")
 
 
 if __name__ == "__main__":

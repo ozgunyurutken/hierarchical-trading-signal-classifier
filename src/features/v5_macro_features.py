@@ -77,6 +77,7 @@ def build_macro_features(aligned: pd.DataFrame,
     # 2. Log returns (price momentum)
     out["SP500_log_return_5d"] = log_return(aligned["SP500"], 5)
     out["Gold_log_return_20d"] = log_return(aligned["Gold"], 20)
+    out["Oil_log_return_20d"] = log_return(aligned["Oil"], 20)
 
     # 3. Rate-of-Change for monthly/level series
     out["FEDFUNDS_change_60d"] = rate_of_change(aligned["FEDFUNDS"], 60)

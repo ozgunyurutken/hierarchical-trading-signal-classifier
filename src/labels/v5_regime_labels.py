@@ -40,6 +40,7 @@ STAGE2_FEATURES = [
     "SP500_log_return_5d",
     "DXY_zscore_long",
     "Gold_log_return_20d",
+    "Oil_log_return_20d",
     "FEDFUNDS_change_60d",
     "CPI_yoy_change",
     "Yield_Curve_10Y_2Y",
@@ -438,6 +439,7 @@ CRISIS_DATE_RANGES = [
     ("2018-10-01", "2018-12-31", "Q4 2018 sell-off"),
     ("2020-02-20", "2020-04-30", "COVID crash"),
     ("2022-02-01", "2022-10-31", "Fed hike + Ukraine war"),
+    ("2025-03-01", "2025-04-15", "2025 Trump tariff crisis"),
 ]
 
 
@@ -557,7 +559,11 @@ class SemanticConstrainedKMeans:
                 neutral_idx: "Neutral"}
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Predict via nearest scaled centroid (no constraint enforcement on test)."""
+        """Predict via nearest scaled centroid (no constraint enforcement on test).
+
+        WARNING: For pretrain DataFrame the model was fit on, use
+        `get_pretrain_labels()` instead — predict() bypasses must-link
+        constraints and causes anchor leakage on training data."""
         X = df[STAGE2_FEATURES]
         valid_mask = X.notna().all(axis=1)
         Xs = self.scaler_.transform(X[valid_mask].values)
@@ -574,6 +580,24 @@ class SemanticConstrainedKMeans:
         for r in REGIME_LABELS:
             out[f"P_{r}"] = (out["regime_label"] == r).astype(float)
         out.loc[~valid_mask, [f"P_{r}" for r in REGIME_LABELS]] = np.nan
+        return out
+
+    def get_pretrain_labels(self, df_pretrain: pd.DataFrame) -> pd.DataFrame:
+        """Return training-time forced labels (constraint enforced) for the
+        pretrain DataFrame the model was fit on. Use INSTEAD of predict()
+        for pretrain — predict() doesn't enforce must-link constraints and
+        causes anchor leakage."""
+        df_valid = df_pretrain.dropna(subset=STAGE2_FEATURES)
+        out = pd.DataFrame(index=df_pretrain.index)
+        out["regime_cluster"] = pd.NA
+        out.loc[df_valid.index, "regime_cluster"] = self.labels_pretrain_
+        out["regime_label"] = out["regime_cluster"].map(
+            lambda c: self.cluster_to_regime_.get(c) if pd.notna(c) else None
+        )
+        for r in REGIME_LABELS:
+            out[f"P_{r}"] = (out["regime_label"] == r).astype(float)
+        out.loc[out["regime_cluster"].isna(),
+                [f"P_{r}" for r in REGIME_LABELS]] = np.nan
         return out
 
     def centroid_summary(self) -> pd.DataFrame:

@@ -53,6 +53,7 @@ data:
   macro_commodities:
     "GC=F": "Gold"
     "SI=F": "Silver"  # for derived Gold/Silver ratio
+    "CL=F": "Oil"     # WTI Crude futures — crisis indicator (2008/2014/2020/2022 spikes/crashes)
 
   macro_yields:
     "^TNX": "US10Y"

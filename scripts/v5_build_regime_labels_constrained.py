@@ -64,11 +64,23 @@ def plot_centroids(model, out: Path):
     print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
 
 
+def _shade_anchors(ax, crisis_ranges=CRISIS_DATE_RANGES):
+    """Subplot height boyu silik darkred fill + başlangıç/bitiş dashed çizgileri.
+
+    Phase 2.1+ anchor visualization: renkler üst üste gözüksün, anchor
+    başlangıç ve bitiş tarihleri net olsun (alpha=0.10 fill + alpha=0.6 lines)."""
+    for start, end, _label in crisis_ranges:
+        s, e = pd.Timestamp(start), pd.Timestamp(end)
+        ax.axvspan(s, e, color="darkred", alpha=0.10, zorder=0)
+        ax.axvline(s, color="darkred", alpha=0.6, lw=0.8, ls="--", zorder=1)
+        ax.axvline(e, color="darkred", alpha=0.6, lw=0.8, ls="--", zorder=1)
+
+
 def _shade(ax, price, regime, log=False, lw=1.0):
     if log:
-        ax.semilogy(price.index, price.values, color="black", lw=lw)
+        ax.semilogy(price.index, price.values, color="black", lw=lw, zorder=3)
     else:
-        ax.plot(price.index, price.values, color="black", lw=lw)
+        ax.plot(price.index, price.values, color="black", lw=lw, zorder=3)
     if regime.empty:
         return
     cur, start = regime.iloc[0], regime.index[0]
@@ -77,11 +89,13 @@ def _shade(ax, price, regime, log=False, lw=1.0):
         if v != cur:
             if pd.notna(cur):
                 ax.axvspan(start, regime.index[i],
-                           color=REGIME_COLORS.get(cur, "white"), alpha=0.30, lw=0)
+                           color=REGIME_COLORS.get(cur, "white"),
+                           alpha=0.25, lw=0, zorder=2)
             cur, start = v, regime.index[i]
     if pd.notna(cur):
         ax.axvspan(start, regime.index[-1],
-                   color=REGIME_COLORS.get(cur, "white"), alpha=0.30, lw=0)
+                   color=REGIME_COLORS.get(cur, "white"),
+                   alpha=0.25, lw=0, zorder=2)
 
 
 def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
@@ -97,46 +111,44 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
                           index_col=0, parse_dates=True)
     vix_z = derived["VIX_zscore_long"].dropna()
     ax = axes[0]
+    _shade_anchors(ax)
     _shade(ax, pd.Series(np.nan, index=pre_r.index),
            pre_r["regime_label"], log=False, lw=0)
-    ax.plot(sp500.index, sp500.values, color="#1f77b4", lw=0.9, label="S&P 500 (left, linear)")
+    ax.plot(sp500.index, sp500.values, color="#1f77b4", lw=0.9,
+            label="S&P 500 (left, linear)", zorder=3)
     ax.set_ylabel("S&P 500", color="#1f77b4")
     ax.tick_params(axis="y", labelcolor="#1f77b4")
     ax2 = ax.twinx()
     ax2.plot(vix_z.index, vix_z.values, color="#d62728", lw=0.7, alpha=0.8,
-             label="VIX z-score long (right)")
+             label="VIX z-score long (right)", zorder=4)
     ax2.axhline(0, color="#d62728", ls=":", lw=0.4, alpha=0.5)
     ax2.axhline(2, color="#d62728", ls="--", lw=0.4, alpha=0.5)
     ax2.set_ylabel("VIX z-score (25-yıl baseline)", color="#d62728")
     ax2.tick_params(axis="y", labelcolor="#d62728")
     ax2.grid(False); ax2.spines["top"].set_visible(False)
-    ax.set_title("Pre-train context (2000-2025) — S&P 500 (linear) + VIX z-score + regime shading",
+    ax.set_title("Pre-train context (2000-2025) — S&P 500 + VIX z-score + "
+                 "regime shading + anchor periods (silik darkred)",
                  fontsize=10, fontweight="bold")
     lines1, labs1 = ax.get_legend_handles_labels()
     lines2, labs2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labs1 + labs2, loc="upper left", fontsize=8)
-    # Mark crisis date ranges as top-edge bar (NOT background, avoids clash
-    # with regime shading which already uses 3 colors).
-    ymin, ymax = ax.get_ylim()
-    bar_y = ymax * 0.97
-    bar_h = ymax * 0.03
-    for start, end, _label in CRISIS_DATE_RANGES:
-        s, e = pd.Timestamp(start), pd.Timestamp(end)
-        ax.fill_between([s, e], bar_y, ymax, color="darkred", alpha=0.85, lw=0)
 
     # 1. BTC
+    _shade_anchors(axes[1])
     _shade(axes[1], btc_close, btc_r["regime_label"], log=True, lw=1.0)
     axes[1].set_ylabel("BTC (log)")
-    axes[1].set_title("BTC + Constrained K-Means regime",
+    axes[1].set_title("BTC + Constrained K-Means regime + anchor periods",
                       fontsize=10, fontweight="bold")
 
     # 2. ETH
+    _shade_anchors(axes[2])
     _shade(axes[2], eth_close, eth_r["regime_label"], log=True, lw=1.0)
     axes[2].set_ylabel("ETH (log)")
-    axes[2].set_title("ETH + Constrained K-Means regime",
+    axes[2].set_title("ETH + Constrained K-Means regime + anchor periods",
                       fontsize=10, fontweight="bold")
 
     # 3. Pre-train regime band only
+    _shade_anchors(axes[3])
     pre_close = pd.Series(1.0, index=pre_r.index)
     _shade(axes[3], pre_close, pre_r["regime_label"], log=False, lw=0.2)
     axes[3].set_yticks([]); axes[3].grid(False)
@@ -221,7 +233,10 @@ def main():
     plot_centroids(model, reports / "Phase2" / "v5_p2.1_constrained_centroids.png")
 
     print(f"\n[2] Inference (BTC/ETH via pretrain reindex — avoids warm-up NaN + weekends)")
-    pre_r = model.predict(pretrain)
+    # CRITICAL: Use get_pretrain_labels() not predict() — predict() bypasses
+    # must-link constraints and causes anchor leakage (~34% leak in V5 P2.1
+    # diagnostics: 2018Q4 → 97% Risk-On, 2022 hike → 86% Neutral).
+    pre_r = model.get_pretrain_labels(pretrain)
     # BTC/ETH regime: reindex pretrain regime to crypto trading days, ffill
     # weekends → Friday's regime (macro doesn't change on weekends).
     btc_r = pre_r.reindex(btc.index, method="ffill")
