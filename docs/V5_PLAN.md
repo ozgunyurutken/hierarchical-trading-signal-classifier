@@ -99,16 +99,20 @@ Geçmiş artefaktlar (v1-v4 + B2) bu branch'te **YOK** — temiz başlangıç. F
 
 ### Faz 2 — Feature Engineering + Labels (2-3 saat)
 1. Technical features (BTC + ETH) → `btc_features_v5.csv`, `eth_features_v5.csv`
-2. Macro features (raw + RoC + zscore + derived spreads)
-3. Stage 1 trend labels (SMA cross + 3-day persistence)
-4. Stage 2 macro regime labels:
-   - K-Means k=3 fit on macro feature subset
+2. Macro features (raw + RoC + long-term static z-score + derived spreads incl. M2 yoy)
+3. **Feature correlation re-check (Decision Gate 1.5)** — derived features sonrası
+   collinearity raw seviye ~0.9 küme'den ne kadar düştü? Stage 2 K-Means için
+   kabul edilebilir mi?
+4. Stage 1 trend labels (SMA cross + 3-day persistence)
+5. Stage 2 macro regime labels:
+   - K-Means k=3 fit on macro feature subset (2000-2025 pre-train data)
    - Elbow + Silhouette + Gap + CH validation plots
    - Semantic relabeling (Risk-On/Off/Neutral)
+   - Inference on crypto-aligned period
    - Output `btc_regime_labels_v5.csv` + cluster centroids
-5. Stage 3 signal labels (dual: adaptive + fixed)
+6. Stage 3 signal labels (dual: adaptive + fixed)
 
-**Decision gate:** Notebook 02 + 03 review — kullanıcı **label dağılımlarını + cluster görsellerini onaylar**, sonra training'e geçilir.
+**Decision gate:** Notebook 02 + 03 review — kullanıcı **collinearity check (1.5) + label dağılımları + cluster görsellerini** onaylar, sonra training'e geçilir.
 
 ### Faz 3 — Stage 1 + Stage 2 Training (3-4 saat)
 1. Stage 1 (Trend Classifier): 4 algorithm × walk-forward CV × Optuna 30 trial
@@ -151,6 +155,7 @@ Her fazın sonunda kullanıcı onayı şart (CLAUDE.md "Show results first, then
 | Gate | Notebook | Kullanıcı kontrol eder |
 |---|---|---|
 | 1 | `01_eda.ipynb` | Aligned dataset shape + price plots + macro distributions + train/test split |
+| **1.5** | `01b_feature_corr_recheck.py` | **Feature engineering sonrası** korelasyon yeniden hesapla. Faz 1'de raw seviye corr ~0.9 küme (BTC/SP500/Gold/M2). Derived features (z-score, RoC, yoy %) sonrası collinearity gerçekten düştü mü? Stage 2 K-Means cluster için kabul edilebilir mi? |
 | 2 | `02_kmeans_validation.ipynb` | Elbow + Silhouette + Gap plot k=3 doğrular mı; cluster centroidleri Risk-On/Off/Neutral semantic mantığa uyuyor mu |
 | 3 | `03_label_review.ipynb` | Stage 1/2/3 label dağılımları (Up%/Down%/Side% + Risk-On%/Off%/Neutral% + Buy%/Sell%/Hold%) makul mü |
 | 4 | `04_stage1_train.ipynb` + `05_stage2_train.ipynb` | Stage 1+2 accuracy seviyeleri kabul edilebilir mi |
