@@ -4,7 +4,7 @@ V5 Faz 2.2 detail — Regime overlay on BTC + ETH + S&P + VIX time series.
 User request: 'Stage 2 regime sonuçlarını BTC, S&P, VIX gibi grafiklerin üzerinde
 görmek isterim'.
 
-Output: reports/v5_p2_regime_overlay_assets.png
+Output: reports/Phase2/v5_p2_regime_overlay_assets.png
 4-panel: BTC log + ETH log + S&P 500 + VIX (log) — all with regime shading
 across full pre-train + crypto era (2000-2025).
 """
@@ -121,7 +121,7 @@ def main():
                  "Risk-Off bands: 2002 dot-com bust, 2008-09 GFC, 2020 COVID, 2022 hike (varies)",
                  fontsize=11.5, fontweight="bold", y=0.998)
     fig.tight_layout(rect=[0, 0.025, 1, 0.96])
-    out = PROJECT_ROOT / "reports" / "v5_p2_regime_overlay_assets.png"
+    out = PROJECT_ROOT / "reports" / "Phase2" / "v5_p2_regime_overlay_assets.png"
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     print(f"saved: {out.relative_to(PROJECT_ROOT)}")

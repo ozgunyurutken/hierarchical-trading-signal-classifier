@@ -9,7 +9,7 @@ Outputs:
   data/processed/btc_features_stage3_v5.csv     (15 stage 3 features)
   data/processed/eth_features_stage3_v5.csv     (15 stage 3 features)
 
-  reports/v5_p1.5_corr_recheck_stage2.png  (Decision Gate 1.5)
+  reports/Phase1.5/v5_p1.5_corr_recheck_stage2.png  (Decision Gate 1.5)
 """
 from __future__ import annotations
 
@@ -133,7 +133,7 @@ def main():
     # ---- Decision Gate 1.5: corr re-check ----
     print("\n[4] Decision Gate 1.5 — Stage 2 corr re-check plot")
     max_corr, median_corr = plot_corr_recheck(btc_macro, eth_macro,
-                                              reports / "v5_p1.5_corr_recheck_stage2.png")
+                                              reports / "Phase1.5" / "v5_p1.5_corr_recheck_stage2.png")
 
     print("\n" + "=" * 60)
     print(f"V5 Faz 2.1 complete.")

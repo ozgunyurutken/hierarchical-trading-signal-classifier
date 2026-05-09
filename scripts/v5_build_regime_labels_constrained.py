@@ -15,9 +15,9 @@ Anchor periods (Risk-Off must-link):
 
 Outputs:
   data/processed/{btc,eth,macro_pretrain}_regime_labels_constrained_v5.csv
-  reports/v5_p4_constrained_centroids.png
-  reports/v5_p4_constrained_timeline.png
-  reports/v5_p4_constrained_distribution.png
+  reports/Phase2/v5_p4_constrained_centroids.png
+  reports/Phase2/v5_p4_constrained_timeline.png
+  reports/Phase2/v5_p4_constrained_distribution.png
 """
 from __future__ import annotations
 
@@ -85,27 +85,54 @@ def _shade(ax, price, regime, log=False, lw=1.0):
 
 
 def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
-    fig, axes = plt.subplots(3, 1, figsize=(15, 11), sharex=True)
-    pre_close = pd.Series(1.0, index=pre_r.index)
-    _shade(axes[0], pre_close, pre_r["regime_label"], log=False, lw=0.2)
-    axes[0].set_yticks([]); axes[0].grid(False)
-    axes[0].set_title("Pre-train (2000-2025) — anchor periods → Risk-Off",
-                      fontsize=10, fontweight="bold")
-    # Mark crisis date ranges with vertical lines on top panel
-    for start, end, label in CRISIS_DATE_RANGES:
-        s, e = pd.Timestamp(start), pd.Timestamp(end)
-        axes[0].axvspan(s, e, color="darkred", alpha=0.15, lw=0)
-        axes[0].annotate(label.split()[0], xy=(s, 0.85), fontsize=7, rotation=90,
-                         color="darkred")
+    fig, axes = plt.subplots(4, 1, figsize=(15, 13), sharex=True,
+                             gridspec_kw={"height_ratios": [1, 1, 1, 1]})
 
+    # 0. Pre-train multi-asset context (S&P + VIX + BTC) + regime shading
+    raw_dir = PROJECT_ROOT / "data" / "raw"
+    sp500 = pd.read_csv(raw_dir / "v5_macro_risk.csv",
+                        index_col=0, parse_dates=True)["SP500"].dropna()
+    vix = pd.read_csv(raw_dir / "v5_macro_risk.csv",
+                      index_col=0, parse_dates=True)["VIX"].dropna()
+    ax = axes[0]
+    _shade(ax, pd.Series(np.nan, index=pre_r.index),
+           pre_r["regime_label"], log=False, lw=0)
+    ax.semilogy(sp500.index, sp500.values, color="#1f77b4", lw=0.9, label="S&P 500 (left)")
+    ax.semilogy(btc_close.index, btc_close.values, color="#f7931a", lw=0.8,
+                label="BTC (left, post-2014)")
+    ax.set_ylabel("S&P / BTC (log)")
+    ax2 = ax.twinx()
+    ax2.plot(vix.index, vix.values, color="#d62728", lw=0.7, alpha=0.8, label="VIX (right)")
+    ax2.set_ylabel("VIX", color="#d62728")
+    ax2.tick_params(axis="y", labelcolor="#d62728")
+    ax2.grid(False); ax2.spines["top"].set_visible(False)
+    ax.set_title("Pre-train multi-asset context (2000-2025) — S&P + VIX + BTC + regime shading",
+                 fontsize=10, fontweight="bold")
+    lines1, labs1 = ax.get_legend_handles_labels()
+    lines2, labs2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labs1 + labs2, loc="upper left", fontsize=8)
+    # Mark crisis date ranges
+    for start, end, _label in CRISIS_DATE_RANGES:
+        s, e = pd.Timestamp(start), pd.Timestamp(end)
+        ax.axvspan(s, e, color="darkred", alpha=0.10, lw=0)
+
+    # 1. BTC
     _shade(axes[1], btc_close, btc_r["regime_label"], log=True, lw=1.0)
     axes[1].set_ylabel("BTC (log)")
     axes[1].set_title("BTC + Constrained K-Means regime",
                       fontsize=10, fontweight="bold")
 
+    # 2. ETH
     _shade(axes[2], eth_close, eth_r["regime_label"], log=True, lw=1.0)
     axes[2].set_ylabel("ETH (log)")
     axes[2].set_title("ETH + Constrained K-Means regime",
+                      fontsize=10, fontweight="bold")
+
+    # 3. Pre-train regime band only
+    pre_close = pd.Series(1.0, index=pre_r.index)
+    _shade(axes[3], pre_close, pre_r["regime_label"], log=False, lw=0.2)
+    axes[3].set_yticks([]); axes[3].grid(False)
+    axes[3].set_title("Pre-train regime band only (compact)",
                       fontsize=10, fontweight="bold")
 
     axes[-1].xaxis.set_major_locator(mdates.YearLocator(2))
@@ -183,7 +210,7 @@ def main():
     print(f"\nCentroids:")
     print(model.centroid_summary().round(3).to_string())
 
-    plot_centroids(model, reports / "v5_p4_constrained_centroids.png")
+    plot_centroids(model, reports / "Phase2" / "v5_p4_constrained_centroids.png")
 
     print(f"\n[2] Inference")
     pre_r = model.predict(pretrain)
@@ -197,9 +224,9 @@ def main():
     plot_timeline(btc["Close"].loc[btc_r.index],
                   eth["Close"].loc[eth_r.index],
                   btc_r, eth_r, pre_r,
-                  reports / "v5_p4_constrained_timeline.png")
+                  reports / "Phase2" / "v5_p4_constrained_timeline.png")
     plot_distribution(btc_r, eth_r, pre_r,
-                      reports / "v5_p4_constrained_distribution.png")
+                      reports / "Phase2" / "v5_p4_constrained_distribution.png")
 
     print("\n" + "=" * 70)
     print("V5 Phase 4 complete.")

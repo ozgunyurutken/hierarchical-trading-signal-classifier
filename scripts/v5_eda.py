@@ -5,10 +5,10 @@ Reads btc_aligned_v5.csv + eth_aligned_v5.csv, produces summary plots
 for user review before proceeding to feature engineering (Faz 2).
 
 Outputs:
-  reports/v5_p1_eda_overview.png            — BTC + ETH price + train/val/test split
-  reports/v5_p1_eda_macro_panels.png        — 9 macro time series
-  reports/v5_p1_eda_distributions.png       — return distribution histograms
-  reports/v5_p1_eda_correlation.png         — feature correlation matrix
+  reports/Phase1/v5_p1_eda_overview.png            — BTC + ETH price + train/val/test split
+  reports/Phase1/v5_p1_eda_macro_panels.png        — 9 macro time series
+  reports/Phase1/v5_p1_eda_distributions.png       — return distribution histograms
+  reports/Phase1/v5_p1_eda_correlation.png         — feature correlation matrix
   data/processed/v5_eda_summary.csv      — summary stats table
 """
 from __future__ import annotations
@@ -312,19 +312,19 @@ def main():
     proc = PROJECT_ROOT / "data" / "processed"
 
     print("\n[1] Plot overview (price + train/val/test split)")
-    plot_overview(btc, eth, reports / "v5_p1_eda_overview.png")
+    plot_overview(btc, eth, reports / "Phase1" / "v5_p1_eda_overview.png")
 
     print("\n[2a] Plot macro panels (9 inputs, crypto-aligned 2014-2025)")
-    plot_macro(btc, reports / "v5_p1_eda_macro_panels.png")
+    plot_macro(btc, reports / "Phase1" / "v5_p1_eda_macro_panels.png")
 
     print("\n[2b] Plot macro pre-train window (2000-2025, Stage 2 K-Means fit data)")
-    plot_macro_pretrain(reports / "v5_p1_eda_macro_pretrain.png")
+    plot_macro_pretrain(reports / "Phase1" / "v5_p1_eda_macro_pretrain.png")
 
     print("\n[3] Plot return + volatility distributions")
-    plot_distributions(btc, eth, reports / "v5_p1_eda_distributions.png")
+    plot_distributions(btc, eth, reports / "Phase1" / "v5_p1_eda_distributions.png")
 
     print("\n[4] Correlation matrix (BTC + ETH + macro, OHLC + Volume excluded)")
-    plot_correlation(btc, eth, reports / "v5_p1_eda_correlation.png")
+    plot_correlation(btc, eth, reports / "Phase1" / "v5_p1_eda_correlation.png")
 
     print("\n[5] Summary statistics CSV")
     summary = write_summary(btc, eth, proc / "v5_eda_summary.csv")

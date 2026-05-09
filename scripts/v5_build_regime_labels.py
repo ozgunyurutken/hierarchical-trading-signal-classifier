@@ -10,10 +10,10 @@ V5 Faz 2.2 — Stage 2 Macro Regime Labels (Decision Gate 2).
    - data/processed/btc_regime_labels_v5.csv
    - data/processed/eth_regime_labels_v5.csv
    - data/processed/macro_pretrain_regime_labels_v5.csv
-   - reports/v5_p2_kmeans_validation.png
-   - reports/v5_p2_kmeans_centroids.png
-   - reports/v5_p2_regime_timeline.png
-   - reports/v5_p2_regime_distribution.png
+   - reports/Phase2/v5_p2_kmeans_validation.png
+   - reports/Phase2/v5_p2_kmeans_centroids.png
+   - reports/Phase2/v5_p2_regime_timeline.png
+   - reports/Phase2/v5_p2_regime_distribution.png
 """
 from __future__ import annotations
 
@@ -121,18 +121,35 @@ def plot_centroids(model, out: Path):
 
 def plot_regime_timeline(btc_close, eth_close, btc_regime, eth_regime,
                          pretrain_regime, out: Path):
-    """Top: Pre-train + BTC + ETH price + regime shading. Show full 2000-2025."""
-    fig, axes = plt.subplots(3, 1, figsize=(15, 11), sharex=True,
-                             gridspec_kw={"height_ratios": [1, 1, 1]})
+    """Top: pre-train multi-asset (S&P+VIX+BTC) overlay + regime shading.
+    Middle: BTC. Bottom: ETH."""
+    fig, axes = plt.subplots(4, 1, figsize=(15, 13), sharex=True,
+                             gridspec_kw={"height_ratios": [1, 1, 1, 1]})
 
-    # 0. Pre-train (synthetic, just shading on a thin line for context)
+    # 0. Pre-train context — S&P 500 (left), VIX (right twin), BTC late (left)
     ax = axes[0]
-    pretrain_close = pd.Series(1.0, index=pretrain_regime.index)  # dummy line
-    _shade_regime(ax, pretrain_close, pretrain_regime["regime_label"], log=False, lw=0.2)
-    ax.set_ylabel("Pre-train regime")
-    ax.set_yticks([]); ax.grid(False)
-    ax.set_title("Pre-train period regime overlay (2000-09 → 2025-12, 6521 bday)",
+    raw_dir = PROJECT_ROOT / "data" / "raw"
+    sp500 = pd.read_csv(raw_dir / "v5_macro_risk.csv",
+                        index_col=0, parse_dates=True)["SP500"].dropna()
+    vix = pd.read_csv(raw_dir / "v5_macro_risk.csv",
+                      index_col=0, parse_dates=True)["VIX"].dropna()
+    # Paint regime first (background)
+    _shade_regime(ax, pd.Series(np.nan, index=pretrain_regime.index),
+                  pretrain_regime["regime_label"], log=False, lw=0)
+    ax.semilogy(sp500.index, sp500.values, color="#1f77b4", lw=0.9, label="S&P 500 (left)")
+    ax.semilogy(btc_close.index, btc_close.values, color="#f7931a", lw=0.8,
+                label="BTC (left, post-2014)")
+    ax.set_ylabel("S&P / BTC (log)")
+    ax2 = ax.twinx()
+    ax2.plot(vix.index, vix.values, color="#d62728", lw=0.7, alpha=0.8, label="VIX (right)")
+    ax2.set_ylabel("VIX", color="#d62728")
+    ax2.tick_params(axis="y", labelcolor="#d62728")
+    ax2.grid(False); ax2.spines["top"].set_visible(False)
+    ax.set_title("Pre-train multi-asset context (2000-2025) — S&P + VIX + BTC + regime shading",
                  fontsize=10, fontweight="bold")
+    lines1, labs1 = ax.get_legend_handles_labels()
+    lines2, labs2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labs1 + labs2, loc="upper left", fontsize=8)
 
     # 1. BTC
     ax = axes[1]
@@ -148,6 +165,14 @@ def plot_regime_timeline(btc_close, eth_close, btc_regime, eth_regime,
     ax.set_title("ETH price + Stage 2 regime shading (2017-11 → 2025-12)",
                  fontsize=10, fontweight="bold")
 
+    # 3. Pre-train regime band only (compact view)
+    ax = axes[3]
+    pretrain_close = pd.Series(1.0, index=pretrain_regime.index)
+    _shade_regime(ax, pretrain_close, pretrain_regime["regime_label"], log=False, lw=0.2)
+    ax.set_ylabel("Regime band"); ax.set_yticks([]); ax.grid(False)
+    ax.set_title("Pre-train regime band only (compact, 2000-09 → 2025-12, 6521 bday)",
+                 fontsize=10, fontweight="bold")
+
     axes[-1].xaxis.set_major_locator(mdates.YearLocator(2))
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     axes[-1].set_xlabel("Date")
@@ -158,7 +183,7 @@ def plot_regime_timeline(btc_close, eth_close, btc_regime, eth_regime,
     fig.suptitle("V5 Decision Gate 2 — Stage 2 Regime Timeline\n"
                  "K-Means fit on pre-train (2000-2025), inference on crypto era",
                  fontsize=12, fontweight="bold", y=0.998)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.96])
+    fig.tight_layout(rect=[0, 0.025, 1, 0.96])
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
@@ -251,7 +276,7 @@ def main():
     print(f"  gap:        {[f'{v:.3f}' for v in val_result.gap]}")
     print(f"  CH:         {[f'{v:.0f}' for v in val_result.calinski_harabasz]}")
 
-    plot_validation(val_result, reports / "v5_p2_kmeans_validation.png")
+    plot_validation(val_result, reports / "Phase2" / "v5_p2_kmeans_validation.png")
 
     # ---- Fit final K-Means k=3 ----
     print("\n[2] Fit K-Means k=3 + semantic relabel")
@@ -260,7 +285,7 @@ def main():
     print("\n  Centroids (original units):")
     print(model.centroid_summary().round(3).to_string())
 
-    plot_centroids(model, reports / "v5_p2_kmeans_centroids.png")
+    plot_centroids(model, reports / "Phase2" / "v5_p2_kmeans_centroids.png")
 
     # ---- Inference on pre-train + BTC + ETH ----
     print("\n[3] Inference (pre-train + BTC + ETH)")
@@ -282,12 +307,12 @@ def main():
         btc["Close"].loc[btc_regime.index],
         eth["Close"].loc[eth_regime.index],
         btc_regime, eth_regime, pretrain_regime,
-        reports / "v5_p2_regime_timeline.png"
+        reports / "Phase2" / "v5_p2_regime_timeline.png"
     )
 
     print("\n[5] Regime distribution plot")
     plot_regime_distribution(btc_regime, eth_regime, pretrain_regime,
-                             reports / "v5_p2_regime_distribution.png")
+                             reports / "Phase2" / "v5_p2_regime_distribution.png")
 
     # ---- Summary ----
     print("\n" + "=" * 70)
