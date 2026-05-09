@@ -1,5 +1,0 @@
-Model,WF F1 (macro),Test Accuracy,Test F1 (macro),Test Balanced Acc,Test MCC
-Stage 1 LDA,0.5969,0.7036,0.6746,0.6889,0.5739
-Stage 1 MLP,0.8911,0.8194,0.8004,0.8379,0.7571
-Stage 3 LDA,0.2651,0.3505,0.1733,0.3315,-0.0209
-Stage 3 MLP,0.3153,0.3842,0.2545,0.3536,0.0624

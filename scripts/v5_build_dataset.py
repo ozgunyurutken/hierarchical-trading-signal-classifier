@@ -79,9 +79,9 @@ def collect_macro(start: str, end: str) -> dict[str, pd.DataFrame]:
     print(f"  DGS2: {len(dgs2)} obs, {dgs2.index.min().date()} → {dgs2.index.max().date()}")
     out["yields"] = out["yields"].join(dgs2.rename("US2Y"), how="left")
 
-    print("\n[macro] FRED monthly (3 series)")
+    print("\n[macro] FRED monthly + weekly (4 series including M2)")
     fred_monthly_dict = {}
-    for sid in ["FEDFUNDS", "CPIAUCSL", "UNRATE"]:
+    for sid in ["FEDFUNDS", "CPIAUCSL", "UNRATE", "WM2NS"]:
         s = fetch_fred_series(sid, start, end)
         fred_monthly_dict[sid] = s
         print(f"  {sid:9s}  {len(s)} obs")

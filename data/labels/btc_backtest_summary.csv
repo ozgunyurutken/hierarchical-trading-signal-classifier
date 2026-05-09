@@ -1,6 +1,0 @@
-strategy,total_return,annualized_return,sharpe_ratio,max_drawdown,n_trades,win_rate,profit_factor,transaction_fee,slippage
-LDA (with cost),0.0,0.0,0.0,0.0,0,0.0,0.0,0.001,0.0005
-LDA (no cost),0.0,0.0,0.0,0.0,0,0.0,0.0,0.001,0.0005
-MLP (with cost),0.1582,0.076,0.5531,-0.1585,26,0.5385,1.6567,0.001,0.0005
-MLP (no cost),0.1582,0.076,0.5531,-0.1585,26,0.5385,1.6567,0.001,0.0005
-Buy & Hold,0.4376,,0.6653,-0.3215,1,,,,

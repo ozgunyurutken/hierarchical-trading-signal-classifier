@@ -92,30 +92,29 @@ def plot_overview(btc, eth, out: Path):
 
 
 def plot_macro(btc, out: Path):
-    """9-panel macro time series with split shading on top panel."""
+    """10-panel macro time series (5x2) with split shading on top panel."""
     macro_cols = ["SP500", "VIX", "DXY", "Gold", "US10Y", "US2Y",
-                  "FEDFUNDS", "CPIAUCSL", "UNRATE"]
+                  "FEDFUNDS", "CPIAUCSL", "UNRATE", "WM2NS"]
     train_end, val_end = get_split_dates(btc)
 
-    fig, axes = plt.subplots(3, 3, figsize=(15, 9), sharex=True)
+    fig, axes = plt.subplots(5, 2, figsize=(15, 12), sharex=True)
     axes = axes.flatten()
     for i, col in enumerate(macro_cols):
         ax = axes[i]
         ax.plot(btc.index, btc[col], lw=0.9, color=f"C{i % 10}")
         ax.set_title(col, fontsize=10, fontweight="bold")
-        # split lines
         ax.axvline(train_end, color="black", ls=":", lw=0.6, alpha=0.6)
         ax.axvline(val_end, color="black", ls=":", lw=0.6, alpha=0.6)
 
-    for ax in axes[-3:]:
+    for ax in axes[-2:]:
         ax.xaxis.set_major_locator(mdates.YearLocator(2))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right", fontsize=9)
 
-    fig.suptitle("V5 Macro Features Time Series — 9 raw inputs\n"
+    fig.suptitle("V5 Macro Features Time Series — 10 raw inputs (incl. M2 / WM2NS)\n"
                  "(dotted lines: train/val/test split boundaries)",
                  fontsize=11.5, fontweight="bold", y=0.998)
-    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
@@ -166,7 +165,7 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
 
     crypto_dt = pd.Timestamp(crypto_start)
 
-    fig, axes = plt.subplots(3, 3, figsize=(16, 10), sharex=True)
+    fig, axes = plt.subplots(5, 2, figsize=(16, 12), sharex=True)
     axes = axes.flatten()
 
     panels = [
@@ -179,10 +178,11 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
         (axes[6], fred["FEDFUNDS"], "FEDFUNDS", "C6"),
         (axes[7], fred["CPIAUCSL"], "CPI Index", "C7"),
         (axes[8], fred["UNRATE"], "UNRATE", "C8"),
+        (axes[9], fred["WM2NS"], "M2 Money Supply (WM2NS, log)", "C9"),
     ]
 
     for ax, series, title, color in panels:
-        if title.startswith("VIX"):
+        if title.startswith("VIX") or title.startswith("M2"):
             ax.semilogy(series.index, series.values, lw=0.7, color=color)
         else:
             ax.plot(series.index, series.values, lw=0.7, color=color)
@@ -217,16 +217,15 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
     fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=9,
                bbox_to_anchor=(0.5, -0.005))
 
-    for ax in axes[-3:]:
+    for ax in axes[-2:]:
         ax.xaxis.set_major_locator(mdates.YearLocator(3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right", fontsize=9)
 
     n_pretrain = (risk.index.max() - risk.index.min()).days
     fig.suptitle(f"V5+ Macro Pre-Training Window — {risk.index.min().date()} → {risk.index.max().date()}  "
-                 f"(~{n_pretrain // 365} yıl, {len(risk)} gün)\n"
-                 f"Stage 2 K-Means cluster fit covers 4 büyük regime cycle: "
-                 f"dot-com bust + GFC 2008 + COVID 2020 + Fed hike 2022\n"
+                 f"(~{n_pretrain // 365} yıl, {len(risk)} gün) — 10 features (incl. M2)\n"
+                 f"Stage 2 K-Means cluster fit covers 4 regime cycle: dot-com + GFC 2008 + COVID 2020 + Fed hike 2022\n"
                  f"Inference yapılırken sadece crypto era (highlighted) kullanılır",
                  fontsize=11.5, fontweight="bold", y=0.998)
     fig.tight_layout(rect=[0, 0.02, 1, 0.96])
@@ -248,8 +247,8 @@ def plot_correlation(btc, out: Path):
             ax.text(j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center",
                     fontsize=7.5, color="white" if abs(corr.iloc[i, j]) > 0.5 else "black")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    ax.set_title("BTC V5 Feature Correlation Matrix (Pearson)\n"
-                 "15 columns: 5 OHLCV + 10 macro",
+    ax.set_title(f"BTC V5 Feature Correlation Matrix (Pearson)\n"
+                 f"{len(corr)} columns: 5 OHLCV + {len(corr) - 5} macro (incl. M2/WM2NS)",
                  fontsize=11, fontweight="bold")
     ax.grid(False)
     fig.tight_layout()

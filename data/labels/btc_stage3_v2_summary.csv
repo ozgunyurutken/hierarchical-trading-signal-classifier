@@ -1,3 +1,0 @@
-model,WF_f1,test_acc,test_f1,test_balanced_acc,test_mcc
-LDA,0.2465,0.3442,0.1737,0.333,-0.0035
-MLP,0.2485,0.3788,0.2626,0.3596,0.0797

@@ -1,3 +1,0 @@
-model,WF_f1,test_acc,test_f1,test_balanced_acc,test_mcc
-XGBOOST_zigzag,0.2882,0.3939,0.2636,0.3718,0.1231
-MLP_zigzag,0.2355,0.3896,0.2746,0.3645,0.0807

@@ -59,16 +59,19 @@ data:
   macro_yields_fred:
     DGS2: "US2Y"  # Yield curve = 10Y - 2Y derived feature
 
-  # FRED monthly (proposal §2.3) — forward-filled to daily with publication-release lag
+  # FRED monthly + weekly (proposal §2.3 + M2 ek) — forward-filled to daily
+  # with publication-release lag
   macro_fred_monthly:
     FEDFUNDS: "Federal Funds Rate"
     CPIAUCSL: "CPI All Urban Consumers"
     UNRATE: "Unemployment Rate"
+    WM2NS: "M2 Money Supply (weekly NSA)"   # 2026-05-08 onayı: posterdeki başarı + likidite proxy
 
   # Derived spreads (computed in feature engineering)
   derived_spreads:
     Yield_Curve_10Y_2Y: "US10Y - US2Y"
     Gold_Silver_Ratio: "Gold / Silver"
+    M2_yoy_change: "WM2NS yoy %"   # likidite genişleme/daralma sinyali
 
 # ============================================================
 # 2. FEATURE ENGINEERING
@@ -117,18 +120,19 @@ features:
     - "Parabolic_SAR_position"   # (close - SAR) / close
     - "log_ret_5d"               # short momentum context
 
-  # ----- Stage 2 input subset (proposal §2.3 — 7 raw + 2 derived = 9) -----
+  # ----- Stage 2 input subset (proposal §2.3 — 7 raw + 3 derived = 10) -----
   stage2_features:
     - "VIX"                      # proposal core
-    - "VIX_zscore_60"            # rolling z-score (proposal: "rolling z-score transformations")
+    - "VIX_zscore_long"          # long-term static z-score (25-yıl baseline)
     - "SP500_log_return_5d"      # equity momentum proxy
-    - "DXY_zscore_60"
+    - "DXY_zscore_long"          # long-term static z-score
     - "Gold_log_return_20d"
     - "FEDFUNDS_change_60d"      # 3-mo FFR change (rate-of-change per proposal)
     - "CPI_yoy_change"           # 252-day CPI YoY
     - "UNRATE_change_180d"       # 6-mo unemployment change
     - "Yield_Curve_10Y_2Y"       # derived spread
-    # Optional derived: Gold_Silver_Ratio (ablation extra)
+    - "M2_yoy_change"            # M2 likidite (2026-05-08 onayı)
+    # Optional ablation: Gold_Silver_Ratio
 
   # ----- Stage 3 input subset (proposal §3 — short-term oscillators only) -----
   stage3_oscillator_features:
