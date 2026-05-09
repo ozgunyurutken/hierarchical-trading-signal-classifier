@@ -1,7 +1,7 @@
 """
 V5 Decision Gate 1.5 detail — 9 derived stage 2 feature time-series plot.
 
-Output: reports/v5_corr_recheck_derived_features.png
+Output: reports/v5_p1.5_corr_recheck_derived_features.png
 
 Each panel: derived feature for BTC-aligned period (2014-09-17 → 2025-12-30)
 with train/val/test split shading.
@@ -127,7 +127,7 @@ def main():
         fontsize=11, fontweight="bold", y=0.998
     )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
-    out = PROJECT_ROOT / "reports" / "v5_corr_recheck_derived_features.png"
+    out = PROJECT_ROOT / "reports" / "v5_p1.5_corr_recheck_derived_features.png"
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     print(f"saved: {out.relative_to(PROJECT_ROOT)}")

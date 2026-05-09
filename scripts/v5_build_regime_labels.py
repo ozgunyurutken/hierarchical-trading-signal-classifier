@@ -10,10 +10,10 @@ V5 Faz 2.2 — Stage 2 Macro Regime Labels (Decision Gate 2).
    - data/processed/btc_regime_labels_v5.csv
    - data/processed/eth_regime_labels_v5.csv
    - data/processed/macro_pretrain_regime_labels_v5.csv
-   - reports/v5_kmeans_validation.png
-   - reports/v5_kmeans_centroids.png
-   - reports/v5_regime_timeline.png
-   - reports/v5_regime_distribution.png
+   - reports/v5_p2_kmeans_validation.png
+   - reports/v5_p2_kmeans_centroids.png
+   - reports/v5_p2_regime_timeline.png
+   - reports/v5_p2_regime_distribution.png
 """
 from __future__ import annotations
 
@@ -251,7 +251,7 @@ def main():
     print(f"  gap:        {[f'{v:.3f}' for v in val_result.gap]}")
     print(f"  CH:         {[f'{v:.0f}' for v in val_result.calinski_harabasz]}")
 
-    plot_validation(val_result, reports / "v5_kmeans_validation.png")
+    plot_validation(val_result, reports / "v5_p2_kmeans_validation.png")
 
     # ---- Fit final K-Means k=3 ----
     print("\n[2] Fit K-Means k=3 + semantic relabel")
@@ -260,7 +260,7 @@ def main():
     print("\n  Centroids (original units):")
     print(model.centroid_summary().round(3).to_string())
 
-    plot_centroids(model, reports / "v5_kmeans_centroids.png")
+    plot_centroids(model, reports / "v5_p2_kmeans_centroids.png")
 
     # ---- Inference on pre-train + BTC + ETH ----
     print("\n[3] Inference (pre-train + BTC + ETH)")
@@ -282,12 +282,12 @@ def main():
         btc["Close"].loc[btc_regime.index],
         eth["Close"].loc[eth_regime.index],
         btc_regime, eth_regime, pretrain_regime,
-        reports / "v5_regime_timeline.png"
+        reports / "v5_p2_regime_timeline.png"
     )
 
     print("\n[5] Regime distribution plot")
     plot_regime_distribution(btc_regime, eth_regime, pretrain_regime,
-                             reports / "v5_regime_distribution.png")
+                             reports / "v5_p2_regime_distribution.png")
 
     # ---- Summary ----
     print("\n" + "=" * 70)
