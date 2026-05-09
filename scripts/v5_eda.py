@@ -92,12 +92,12 @@ def plot_overview(btc, eth, out: Path):
 
 
 def plot_macro(btc, out: Path):
-    """10-panel macro time series (5x2) with split shading on top panel."""
+    """10-panel macro time series (5x2). Each panel its own x-axis labels."""
     macro_cols = ["SP500", "VIX", "DXY", "Gold", "US10Y", "US2Y",
                   "FEDFUNDS", "CPIAUCSL", "UNRATE", "WM2NS"]
     train_end, val_end = get_split_dates(btc)
 
-    fig, axes = plt.subplots(5, 2, figsize=(15, 12), sharex=True)
+    fig, axes = plt.subplots(5, 2, figsize=(15, 13))   # sharex=False → her satır kendi label
     axes = axes.flatten()
     for i, col in enumerate(macro_cols):
         ax = axes[i]
@@ -105,11 +105,9 @@ def plot_macro(btc, out: Path):
         ax.set_title(col, fontsize=10, fontweight="bold")
         ax.axvline(train_end, color="black", ls=":", lw=0.6, alpha=0.6)
         ax.axvline(val_end, color="black", ls=":", lw=0.6, alpha=0.6)
-
-    for ax in axes[-2:]:
         ax.xaxis.set_major_locator(mdates.YearLocator(2))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right", fontsize=9)
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=0, ha="center", fontsize=8.5)
 
     fig.suptitle("V5 Macro Features Time Series — 10 raw inputs (incl. M2 / WM2NS)\n"
                  "(dotted lines: train/val/test split boundaries)",
@@ -165,7 +163,7 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
 
     crypto_dt = pd.Timestamp(crypto_start)
 
-    fig, axes = plt.subplots(5, 2, figsize=(16, 12), sharex=True)
+    fig, axes = plt.subplots(5, 2, figsize=(16, 13))   # sharex=False → her satır kendi label
     axes = axes.flatten()
 
     panels = [
@@ -187,6 +185,10 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
             ax.semilogy(s.index, s.values, lw=0.9, color=color)
         else:
             ax.plot(s.index, s.values, lw=0.9, color=color)
+        # x-axis labels her satıra (yatay)
+        ax.xaxis.set_major_locator(mdates.YearLocator(3))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=0, ha="center", fontsize=8.5)
 
         # Crypto-era shading (V5+ training start)
         ax.axvspan(crypto_dt, series.index.max(), color="#ffe5b4", alpha=0.4)
@@ -218,11 +220,6 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
     fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=9,
                bbox_to_anchor=(0.5, -0.005))
 
-    for ax in axes[-2:]:
-        ax.xaxis.set_major_locator(mdates.YearLocator(3))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right", fontsize=9)
-
     n_pretrain = (risk.index.max() - risk.index.min()).days
     fig.suptitle(f"V5+ Macro Pre-Training Window — {risk.index.min().date()} → {risk.index.max().date()}  "
                  f"(~{n_pretrain // 365} yıl, {len(risk)} gün) — 10 features (incl. M2)\n"
@@ -235,25 +232,36 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
     print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
 
 
-def plot_correlation(btc, out: Path):
-    """Correlation heatmap of FEATURE columns on BTC.
-    Open/High/Low excluded (~1.0 with Close, redundant)."""
-    feature_cols = [c for c in btc.columns if c not in ("Open", "High", "Low")]
-    fig, ax = plt.subplots(figsize=(11, 9))
-    corr = btc[feature_cols].corr()
+def plot_correlation(btc, eth, out: Path):
+    """Correlation heatmap — BTC + ETH Close prices + macro features.
+    OHLC + Volume excluded (Volume noise, OHLC ~1.0 with Close)."""
+    macro_cols = ["SP500", "VIX", "DXY", "Gold", "Silver", "US10Y", "US2Y",
+                  "FEDFUNDS", "CPIAUCSL", "UNRATE", "WM2NS"]
+    # Common period: ETH starts 2017-11-09
+    common_idx = btc.index.intersection(eth.index)
+    merged = pd.concat([
+        btc.loc[common_idx, "Close"].rename("BTC"),
+        eth.loc[common_idx, "Close"].rename("ETH"),
+        btc.loc[common_idx, macro_cols],
+    ], axis=1).dropna()
+
+    fig, ax = plt.subplots(figsize=(11, 9.5))
+    corr = merged.corr()
     im = ax.imshow(corr, cmap="RdBu_r", vmin=-1, vmax=1)
     ax.set_xticks(range(len(corr))); ax.set_yticks(range(len(corr)))
-    ax.set_xticklabels(corr.columns, rotation=45, ha="right", fontsize=9)
+    ax.set_xticklabels(corr.columns, rotation=0, ha="center", fontsize=9)
     ax.set_yticklabels(corr.columns, fontsize=9)
     for i in range(len(corr)):
         for j in range(len(corr)):
             ax.text(j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center",
                     fontsize=7.5, color="white" if abs(corr.iloc[i, j]) > 0.5 else "black")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    ax.set_title(f"BTC V5 Feature Correlation Matrix (Pearson)\n"
-                 f"{len(corr)} feature columns: Close + Volume + {len(corr) - 2} macro "
-                 f"(Open/High/Low excluded — ~1.0 with Close, redundant)",
-                 fontsize=11, fontweight="bold")
+    ax.set_title(f"V5 Feature Correlation Matrix (Pearson) — {len(corr)} cols\n"
+                 f"BTC + ETH Close prices + 11 macro features  "
+                 f"({common_idx.min().date()} → {common_idx.max().date()}, "
+                 f"common period {len(merged)} gün)\n"
+                 f"OHLC excluded (~1.0 with Close); Volume excluded (noise, not feature)",
+                 fontsize=10.5, fontweight="bold")
     ax.grid(False)
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
@@ -315,8 +323,8 @@ def main():
     print("\n[3] Plot return + volatility distributions")
     plot_distributions(btc, eth, reports / "v5_eda_distributions.png")
 
-    print("\n[4] Correlation matrix")
-    plot_correlation(btc, reports / "v5_eda_correlation.png")
+    print("\n[4] Correlation matrix (BTC + ETH + macro, OHLC + Volume excluded)")
+    plot_correlation(btc, eth, reports / "v5_eda_correlation.png")
 
     print("\n[5] Summary statistics CSV")
     summary = write_summary(btc, eth, proc / "v5_eda_summary.csv")
