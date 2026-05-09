@@ -257,3 +257,166 @@ class SemanticGMM:
         df = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
         df.index = [self.cluster_to_regime_[i] for i in range(self.n_components)]
         return df.loc[REGIME_LABELS]
+
+
+# ============================================================
+# Phase 3 (V5 2026-05-09): Sparse K-Means with L1 feature weighting
+# Reference: Witten & Tibshirani (2010) JASA [LR1]
+# Algorithm: §3 KMeans Sparse Clustering
+# ============================================================
+
+def _soft_threshold(a: np.ndarray, delta: float) -> np.ndarray:
+    """Soft-threshold operator S(a, Δ) = sign(a) * max(|a| - Δ, 0)."""
+    return np.sign(a) * np.maximum(np.abs(a) - delta, 0.0)
+
+
+def _compute_a_j(X: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
+    """Compute BCSS contribution per feature j:
+       a_j = sum_k n_k * (mean_kj - mean_j)^2 — TSS_j - WCSS_j
+       More precisely (Witten 2010): a_j = TSS_j - WCSS_j per feature."""
+    n, p = X.shape
+    overall_mean = X.mean(axis=0)
+    a = np.zeros(p)
+    for c in range(k):
+        mask = labels == c
+        n_c = mask.sum()
+        if n_c == 0:
+            continue
+        cluster_mean = X[mask].mean(axis=0)
+        a += n_c * (cluster_mean - overall_mean) ** 2
+    return a   # length p, BCSS per feature
+
+
+def _solve_w(a: np.ndarray, s: float, tol: float = 1e-6, max_iter: int = 50) -> np.ndarray:
+    """Find w that maximizes sum_j w_j * a_j s.t. ||w||_2 ≤ 1, ||w||_1 ≤ s, w ≥ 0.
+    Witten & Tibshirani 2010 Lemma 1: w = S(a, Δ)+ / ||S(a, Δ)+||_2
+    where Δ binary-searched until ||w||_1 = s."""
+    a_pos = np.maximum(a, 0.0)
+    if a_pos.sum() == 0:
+        return np.ones_like(a) / np.sqrt(len(a))
+    # Try Δ=0 first
+    w_try = a_pos / np.linalg.norm(a_pos)
+    if np.sum(w_try) <= s:
+        return w_try
+    # Binary search on Δ
+    lo, hi = 0.0, np.max(a_pos)
+    for _ in range(max_iter):
+        delta = (lo + hi) / 2
+        w_st = _soft_threshold(a_pos, delta)
+        norm = np.linalg.norm(w_st)
+        if norm < tol:
+            hi = delta
+            continue
+        w = w_st / norm
+        l1 = np.sum(w)
+        if abs(l1 - s) < tol:
+            return w
+        if l1 > s:
+            lo = delta
+        else:
+            hi = delta
+    w_st = _soft_threshold(a_pos, (lo + hi) / 2)
+    norm = np.linalg.norm(w_st)
+    return w_st / max(norm, tol)
+
+
+@dataclass
+class SemanticSparseKMeans:
+    """Witten-Tibshirani 2010 Sparse K-Means + semantic relabel.
+    Feature weights w_j learned per iteration with L1 sparsity penalty.
+
+    Hyperparameter:
+      s ∈ [1, sqrt(p)] — L1 bound. s=1 → most sparse, s=sqrt(p) → uniform.
+      Default s = sqrt(p)/1.5 (mild sparsity).
+    """
+    n_clusters: int = 3
+    s: float | None = None
+    n_outer_iter: int = 20
+    random_state: int = 42
+
+    def fit(self, df_pretrain: pd.DataFrame):
+        X = df_pretrain[STAGE2_FEATURES].dropna().values
+        self.scaler_ = StandardScaler().fit(X)
+        Xs = self.scaler_.transform(X)
+        n, p = Xs.shape
+        s = self.s if self.s is not None else np.sqrt(p) / 1.5
+        self.s_ = s
+
+        # Initialize w uniformly
+        w = np.ones(p) / np.sqrt(p)
+        prev_obj = -np.inf
+
+        for it in range(self.n_outer_iter):
+            # Step 1: fixed w, optimize cluster assignments via weighted K-Means
+            X_weighted = Xs * np.sqrt(w)
+            km = KMeans(n_clusters=self.n_clusters,
+                        random_state=self.random_state,
+                        n_init=10).fit(X_weighted)
+            labels = km.labels_
+
+            # Step 2: fixed labels, optimize w
+            a = _compute_a_j(Xs, labels, self.n_clusters)
+            w_new = _solve_w(a, s)
+
+            # Convergence check
+            obj = float(np.sum(w_new * a))
+            if abs(obj - prev_obj) < 1e-5:
+                w = w_new
+                break
+            prev_obj = obj
+            w = w_new
+
+        self.feature_weights_ = w
+        # Final K-Means with learned weights
+        X_weighted = Xs * np.sqrt(w)
+        self.kmeans_ = KMeans(n_clusters=self.n_clusters,
+                              random_state=self.random_state,
+                              n_init=20).fit(X_weighted)
+        # Centroid in original (un-weighted, un-scaled) space
+        # Recompute by averaging original X within each weighted-K-Means cluster
+        centroids_unscaled = np.zeros((self.n_clusters, p))
+        for c in range(self.n_clusters):
+            mask = self.kmeans_.labels_ == c
+            centroids_unscaled[c] = X[mask].mean(axis=0)
+        self.centroids_ = centroids_unscaled
+        self.cluster_to_regime_ = self._semantic_relabel()
+        return self
+
+    def _semantic_relabel(self) -> dict[int, str]:
+        cent = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
+        risk_off_score = cent["VIX_zscore_long"] - cent["SP500_log_return_5d"] * 50
+        risk_on_score = -cent["VIX_zscore_long"] + cent["SP500_log_return_5d"] * 50
+        risk_off_idx = int(risk_off_score.idxmax())
+        risk_on_idx = int(risk_on_score.idxmax())
+        if risk_on_idx == risk_off_idx:
+            risk_off_idx = int(risk_off_score.drop(risk_on_idx).idxmax())
+        all_idx = set(range(self.n_clusters))
+        neutral_idx = (all_idx - {risk_on_idx, risk_off_idx}).pop()
+        return {risk_on_idx: "Risk-On", risk_off_idx: "Risk-Off", neutral_idx: "Neutral"}
+
+    def predict(self, df: pd.DataFrame) -> pd.DataFrame:
+        X = df[STAGE2_FEATURES]
+        valid_mask = X.notna().all(axis=1)
+        Xs = self.scaler_.transform(X[valid_mask].values)
+        Xw = Xs * np.sqrt(self.feature_weights_)
+        cluster_ids = self.kmeans_.predict(Xw)
+
+        out = pd.DataFrame(index=df.index)
+        out["regime_cluster"] = pd.NA
+        out.loc[valid_mask, "regime_cluster"] = cluster_ids
+        out["regime_label"] = out["regime_cluster"].map(
+            lambda c: self.cluster_to_regime_.get(c) if pd.notna(c) else None
+        )
+        for r in REGIME_LABELS:
+            out[f"P_{r}"] = (out["regime_label"] == r).astype(float)
+        out.loc[~valid_mask, [f"P_{r}" for r in REGIME_LABELS]] = np.nan
+        return out
+
+    def centroid_summary(self) -> pd.DataFrame:
+        df = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
+        df.index = [self.cluster_to_regime_[i] for i in range(self.n_clusters)]
+        return df.loc[REGIME_LABELS]
+
+    def feature_weights_summary(self) -> pd.Series:
+        return pd.Series(self.feature_weights_, index=STAGE2_FEATURES,
+                         name="weight").sort_values(ascending=False)
