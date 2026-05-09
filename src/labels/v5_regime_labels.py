@@ -931,3 +931,310 @@ class RuleBasedVIXClassifier:
                     elif j < len(runs) - 1:
                         out[s:e] = runs[j + 1][2]
         return pd.Series(out, index=labels.index)
+
+
+# ============================================================
+# Phase 2.7 (V5 2026-05-09): Composite VIX-based finite state machine.
+# Phase 2.6 (saf VIX threshold) iki sorun gösterdi:
+#   - 2018 Q4: Bear spike kısa, hemen Neutral'a düştü (Bear yeterince stickyhear değil)
+#   - 2020 COVID: Spike çok büyük, recovery uzun (Bull'a geri dönüş gecikti)
+#
+# Çözüm:
+#   1) Asymmetric (hysteresis) thresholds — Bear giriş kolay, çıkış zor
+#   2) Minimum dwell time — Bear'a girince min 20 gün, Bull'a girince min 30 gün
+#   3) VIX velocity override — VIX hızla düşerken (5d Δ < -0.8) ve SP500
+#      pozitifse, Bear'dan Neutral'a fast-track (dwell time bypass)
+# ============================================================
+
+
+@dataclass
+class CompositeVIXRegimeClassifier:
+    """Phase 2.7 — Hysteresis + Dwell + VIX Velocity composite state machine.
+
+    State transitions (asymmetric, single-hop):
+      Bull    → Neutral : VIX_z > bull_exit_threshold (and dwell ≥ bull_min_dwell)
+      Neutral → Bear    : VIX_z > bear_entry_threshold
+      Neutral → Bull    : VIX_z < bull_entry_threshold AND SP500_5d > 0
+      Bear    → Neutral : VIX_z < bear_exit_threshold (and dwell ≥ bear_min_dwell)
+                          OR velocity override
+
+    Velocity override (Bear → Neutral fast-track):
+      VIX_z[t] - VIX_z[t-velocity_window] < velocity_threshold
+      AND SP500_5d > velocity_sp500_min
+
+    Direct Bull↔Bear transitions disallowed (must pass through Neutral).
+    """
+    bear_entry_threshold: float = 1.0
+    bear_exit_threshold: float = 0.3
+    bull_entry_threshold: float = -0.5
+    bull_exit_threshold: float = 0.0
+    bear_min_dwell: int = 20
+    bull_min_dwell: int = 30
+    velocity_window: int = 5
+    velocity_threshold: float = -0.8
+    velocity_sp500_min: float = 0.0
+    feature_vix: str = "VIX_zscore_long"
+    feature_sp500: str = "SP500_log_return_5d"
+    initial_regime: str = "Neutral"
+
+    # Phase 2.8 extension fields (defaults disable behavior to keep
+    # Phase 2.7 backward-compatible).
+    feature_yield_curve: str = "Yield_Curve_10Y_2Y"
+    enable_yield_curve_override: bool = False
+    yield_curve_inverted_threshold: float = 0.0
+    yield_curve_persistence_window: int = 30
+    yield_curve_blocks_bull_entry: bool = False  # Phase 2.8 had True; 2.9 default False
+
+    # Phase 2.10: YC override conditional on S&P 500 momentum weakness
+    # If True, YC override only fires when SP500 long-window return < threshold
+    # (i.e., yield curve recession signal corroborated by actual market weakness).
+    # This prevents 2024-style false positives where YC inverted but S&P at ATH.
+    yc_requires_sp500_weakness: bool = False
+    feature_sp500_long_return: str = "SP500_60d_return"
+    sp500_weakness_threshold: float = 0.0
+
+    # Phase 2.10: Bull entry velocity override (V-shape recovery detection).
+    # Standard Bull entry needs VIX_z < bull_entry_threshold (e.g., -0.5).
+    # In V-shape recoveries (2020 May, 2022 Q4) VIX z-score is still positive
+    # but rapidly falling AND SP500 has recovered. This branch lets us enter
+    # Bull early in those cases without changing other regions.
+    enable_bull_velocity_entry: bool = False
+    bull_velocity_window: int = 30
+    bull_velocity_threshold: float = -0.6        # ΔVIX_z[30d] < -0.6
+    bull_velocity_sp500_min: float = 0.05        # SP500_60d_return > +5%
+
+    # Phase 2.11: Bear velocity entry override (rapid escalation).
+    # Standard Bear entry needs VIX_z > bear_entry_threshold (e.g., 1.0).
+    # In rapid shock events (2025 Apr Liberation Day, 2018 Feb volmageddon),
+    # VIX spikes quickly while SP500 sells off — but VIX_z may not yet exceed
+    # 1.0. This branch catches Bear earlier.
+    enable_bear_velocity_entry: bool = False
+    bear_velocity_entry_window: int = 5
+    bear_velocity_entry_threshold: float = 0.6   # ΔVIX_z[5d] > +0.6
+    bear_velocity_entry_sp500_max: float = -0.015 # SP500_5d < -1.5%
+
+    # Phase 2.11b: minimum Neutral dwell before allowing Bear re-entry.
+    # Prevents flip-flop after Bear→Neutral transition (e.g., 2020 Apr-Aug noise).
+    bear_reentry_min_neutral_dwell: int = 0
+
+    # Phase 2.9 extension: DXY + M2 macro stress composite (Rule 5)
+    feature_dxy: str = "DXY_zscore_long"
+    feature_m2: str = "M2_yoy_change"
+    enable_macro_stress_override: bool = False
+    dxy_strong_threshold: float = 1.0
+    m2_low_threshold: float = 0.023
+    macro_stress_window: int = 30
+    macro_stress_combine: str = "AND"
+
+    def fit(self, df_pretrain: pd.DataFrame):
+        vix_z = df_pretrain[self.feature_vix].dropna()
+        self.pretrain_vix_z_stats_ = {
+            "mean": float(vix_z.mean()),
+            "std": float(vix_z.std()),
+            "p10": float(vix_z.quantile(0.10)),
+            "p50": float(vix_z.quantile(0.50)),
+            "p90": float(vix_z.quantile(0.90)),
+        }
+        return self
+
+    def predict(self, df: pd.DataFrame) -> pd.DataFrame:
+        df_sorted = df.sort_index()
+        vix_z = df_sorted[self.feature_vix]
+        sp_5d = df_sorted[self.feature_sp500]
+        vix_velocity = vix_z - vix_z.shift(self.velocity_window)
+        vix_velocity_bull = vix_z - vix_z.shift(self.bull_velocity_window)
+        vix_velocity_bear_entry = vix_z - vix_z.shift(self.bear_velocity_entry_window)
+
+        # Phase 2.8: persistent yield curve inversion (rolling-window mean < threshold)
+        if self.enable_yield_curve_override and self.feature_yield_curve in df_sorted.columns:
+            yc = df_sorted[self.feature_yield_curve]
+            yc_persistent = (yc.rolling(self.yield_curve_persistence_window,
+                                         min_periods=self.yield_curve_persistence_window).mean()
+                             < self.yield_curve_inverted_threshold)
+            yc_arr = yc_persistent.values
+        else:
+            yc_arr = np.zeros(len(df_sorted), dtype=bool)
+
+        # Phase 2.10: SP500 long-window weakness gate for YC override
+        if (self.yc_requires_sp500_weakness
+                and self.feature_sp500_long_return in df_sorted.columns):
+            sp_long = df_sorted[self.feature_sp500_long_return]
+            sp_weak = (sp_long < self.sp500_weakness_threshold).fillna(False)
+            sp_weak_arr = sp_weak.values
+        else:
+            sp_weak_arr = np.ones(len(df_sorted), dtype=bool)  # default: always true (no gate)
+
+        # Phase 2.10: Bull velocity entry — long SP500 return for V-shape recovery
+        if (self.enable_bull_velocity_entry
+                and self.feature_sp500_long_return in df_sorted.columns):
+            sp_long_series = df_sorted[self.feature_sp500_long_return]
+            sp_long_arr = sp_long_series.values.astype(float)
+        else:
+            sp_long_arr = np.full(len(df_sorted), np.nan)
+        vix_velocity_bull_arr = vix_velocity_bull.values
+        vix_velocity_bear_entry_arr = vix_velocity_bear_entry.values
+
+        # Phase 2.9: DXY + M2 macro stress composite
+        if (self.enable_macro_stress_override
+                and self.feature_dxy in df_sorted.columns
+                and self.feature_m2 in df_sorted.columns):
+            dxy_z = df_sorted[self.feature_dxy]
+            m2_yoy = df_sorted[self.feature_m2]
+            dxy_strong = (dxy_z.rolling(self.macro_stress_window,
+                                         min_periods=self.macro_stress_window).mean()
+                          > self.dxy_strong_threshold)
+            m2_low = (m2_yoy.rolling(self.macro_stress_window,
+                                      min_periods=self.macro_stress_window).mean()
+                      < self.m2_low_threshold)
+            if self.macro_stress_combine == "AND":
+                macro_stress = dxy_strong & m2_low
+            else:
+                macro_stress = dxy_strong | m2_low
+            macro_stress_arr = macro_stress.values
+        else:
+            macro_stress_arr = np.zeros(len(df_sorted), dtype=bool)
+
+        labels_arr = np.empty(len(df_sorted), dtype=object)
+        velocity_triggered = np.zeros(len(df_sorted), dtype=bool)
+        yc_triggered = np.zeros(len(df_sorted), dtype=bool)
+        macro_stress_triggered = np.zeros(len(df_sorted), dtype=bool)
+        bull_velocity_triggered = np.zeros(len(df_sorted), dtype=bool)
+        bear_velocity_triggered = np.zeros(len(df_sorted), dtype=bool)
+        current_regime = self.initial_regime
+        days_in_regime = 0
+        last_neutral_from_bear = False  # Phase 2.11b: track Bear→Neutral transitions
+
+        v_arr = vix_z.values
+        sp_arr = sp_5d.values
+        vel_arr = vix_velocity.values
+
+        for i in range(len(df_sorted)):
+            v = v_arr[i]
+            sp = sp_arr[i]
+            vel = vel_arr[i]
+            yc_inverted = bool(yc_arr[i])
+            sp_weak = bool(sp_weak_arr[i])
+            macro_stress = bool(macro_stress_arr[i])
+
+            if pd.isna(v):
+                labels_arr[i] = None
+                continue
+
+            new_regime = current_regime
+            override = False
+            yc_force = False
+            ms_force = False
+            bull_vel_force = False
+            bear_vel_force = False
+
+            if current_regime == "Bull":
+                # Phase 2.10: yield curve persistent inversion AND SP500 weakness → defensive force
+                if (yc_inverted and sp_weak
+                        and days_in_regime >= self.bull_min_dwell):
+                    new_regime = "Neutral"
+                    yc_force = True
+                # Phase 2.9: macro stress composite (DXY strong + M2 low) → defensive force
+                elif macro_stress and days_in_regime >= self.bull_min_dwell:
+                    new_regime = "Neutral"
+                    ms_force = True
+                elif (v > self.bull_exit_threshold
+                        and days_in_regime >= self.bull_min_dwell):
+                    new_regime = "Neutral"
+            elif current_regime == "Neutral":
+                # Phase 2.11: Bear velocity entry (rapid escalation, e.g., 2025 Apr)
+                bear_velocity_entry = False
+                if self.enable_bear_velocity_entry:
+                    vbe = vix_velocity_bear_entry_arr[i]
+                    bear_velocity_entry = (
+                        pd.notna(vbe)
+                        and vbe > self.bear_velocity_entry_threshold
+                        and pd.notna(sp)
+                        and sp < self.bear_velocity_entry_sp500_max
+                    )
+                # Phase 2.11b: re-entry dwell guard — only blocks if Neutral
+                # was entered from Bear (prevents Bear→Neutral→Bear flip-flop).
+                # Allows immediate Bear entry if Neutral came from Bull.
+                bear_reentry_ok = (
+                    not last_neutral_from_bear
+                    or days_in_regime >= self.bear_reentry_min_neutral_dwell
+                )
+                if v > self.bear_entry_threshold and bear_reentry_ok:
+                    new_regime = "Bear"
+                elif bear_velocity_entry and bear_reentry_ok:
+                    new_regime = "Bear"
+                    bear_vel_force = True
+                else:
+                    # Bull entry: VIX low + SP500 positive
+                    bull_blocked = (
+                        self.yield_curve_blocks_bull_entry and yc_inverted
+                    )
+                    standard_bull_entry = (
+                        v < self.bull_entry_threshold
+                        and pd.notna(sp) and sp > 0
+                    )
+                    # Phase 2.10: V-shape recovery — VIX falling fast + SP500 recovered
+                    velocity_bull_entry = False
+                    if self.enable_bull_velocity_entry:
+                        vbv = vix_velocity_bull_arr[i]
+                        spl = sp_long_arr[i]
+                        velocity_bull_entry = (
+                            pd.notna(vbv)
+                            and vbv < self.bull_velocity_threshold
+                            and pd.notna(spl)
+                            and spl > self.bull_velocity_sp500_min
+                        )
+                    if (standard_bull_entry or velocity_bull_entry) and not bull_blocked:
+                        new_regime = "Bull"
+                        if velocity_bull_entry and not standard_bull_entry:
+                            bull_vel_force = True
+            elif current_regime == "Bear":
+                vel_override = (pd.notna(vel) and vel < self.velocity_threshold
+                                and pd.notna(sp)
+                                and sp > self.velocity_sp500_min)
+                if vel_override:
+                    new_regime = "Neutral"
+                    override = True
+                elif (v < self.bear_exit_threshold
+                      and days_in_regime >= self.bear_min_dwell):
+                    new_regime = "Neutral"
+
+            if new_regime != current_regime:
+                # Phase 2.11b: track if Neutral was entered from Bear
+                if new_regime == "Neutral":
+                    last_neutral_from_bear = (current_regime == "Bear")
+                current_regime = new_regime
+                days_in_regime = 1
+                velocity_triggered[i] = override
+                yc_triggered[i] = yc_force
+                macro_stress_triggered[i] = ms_force
+                bull_velocity_triggered[i] = bull_vel_force
+                bear_velocity_triggered[i] = bear_vel_force
+            else:
+                days_in_regime += 1
+
+            labels_arr[i] = current_regime
+
+        labels = pd.Series(labels_arr, index=df_sorted.index)
+        out = pd.DataFrame(index=df.index)
+        out["regime_label"] = labels.reindex(df.index)
+        out["velocity_override"] = pd.Series(
+            velocity_triggered, index=df_sorted.index
+        ).reindex(df.index, fill_value=False)
+        out["yield_curve_override"] = pd.Series(
+            yc_triggered, index=df_sorted.index
+        ).reindex(df.index, fill_value=False)
+        out["macro_stress_override"] = pd.Series(
+            macro_stress_triggered, index=df_sorted.index
+        ).reindex(df.index, fill_value=False)
+        out["bull_velocity_entry"] = pd.Series(
+            bull_velocity_triggered, index=df_sorted.index
+        ).reindex(df.index, fill_value=False)
+        out["bear_velocity_entry"] = pd.Series(
+            bear_velocity_triggered, index=df_sorted.index
+        ).reindex(df.index, fill_value=False)
+        for r in BULL_BEAR_LABELS:
+            out[f"P_{r}"] = (out["regime_label"] == r).astype(float)
+        valid = vix_z.notna() & sp_5d.notna()
+        valid_idx = valid.reindex(df.index, fill_value=False)
+        out.loc[~valid_idx, [f"P_{r}" for r in BULL_BEAR_LABELS]] = np.nan
+        return out
