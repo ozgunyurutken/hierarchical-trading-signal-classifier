@@ -1017,6 +1017,11 @@ class CompositeVIXRegimeClassifier:
     # Prevents flip-flop after Bear→Neutral transition (e.g., 2020 Apr-Aug noise).
     bear_reentry_min_neutral_dwell: int = 0
 
+    # Phase 2.12: minimum Neutral dwell before threshold-based exits (Bull/Bear entry).
+    # Velocity entries (Bull velocity, Bear velocity) bypass this guard for rapid
+    # response to V-shape recoveries / crisis escalations.
+    neutral_min_dwell: int = 0
+
     # Phase 2.9 extension: DXY + M2 macro stress composite (Rule 5)
     feature_dxy: str = "DXY_zscore_long"
     feature_m2: str = "M2_yoy_change"
@@ -1158,11 +1163,14 @@ class CompositeVIXRegimeClassifier:
                     not last_neutral_from_bear
                     or days_in_regime >= self.bear_reentry_min_neutral_dwell
                 )
-                if v > self.bear_entry_threshold and bear_reentry_ok:
-                    new_regime = "Bear"
-                elif bear_velocity_entry and bear_reentry_ok:
+                # Phase 2.12: standard Neutral dwell guard for threshold-based exits.
+                # Velocity entries bypass this for rapid crisis response.
+                neutral_dwell_ok = days_in_regime >= self.neutral_min_dwell
+                if bear_velocity_entry and bear_reentry_ok:
                     new_regime = "Bear"
                     bear_vel_force = True
+                elif v > self.bear_entry_threshold and bear_reentry_ok and neutral_dwell_ok:
+                    new_regime = "Bear"
                 else:
                     # Bull entry: VIX low + SP500 positive
                     bull_blocked = (
@@ -1183,10 +1191,11 @@ class CompositeVIXRegimeClassifier:
                             and pd.notna(spl)
                             and spl > self.bull_velocity_sp500_min
                         )
-                    if (standard_bull_entry or velocity_bull_entry) and not bull_blocked:
+                    if velocity_bull_entry and not bull_blocked:
                         new_regime = "Bull"
-                        if velocity_bull_entry and not standard_bull_entry:
-                            bull_vel_force = True
+                        bull_vel_force = True
+                    elif standard_bull_entry and neutral_dwell_ok and not bull_blocked:
+                        new_regime = "Bull"
             elif current_regime == "Bear":
                 vel_override = (pd.notna(vel) and vel < self.velocity_threshold
                                 and pd.notna(sp)

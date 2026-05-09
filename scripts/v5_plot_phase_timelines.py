@@ -71,6 +71,9 @@ PHASES = [
     ("v5_phase2.11_bear_velocity",
      "composite_macro_v4_v5",
      "V5 Phase 2.11 — + Bear velocity entry (rapid escalation)"),
+    ("v5_phase2.12_noise_reduction",
+     "composite_macro_v5_v5",
+     "V5 Phase 2.12 — + Neutral min dwell (noise reduction)"),
 ]
 
 
