@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score, calinski_harabasz_score
 from sklearn.preprocessing import StandardScaler
 
@@ -174,3 +175,85 @@ class SemanticKMeans:
         df = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
         df.index = [self.cluster_to_regime_[i] for i in range(self.n_clusters)]
         return df.loc[REGIME_LABELS]   # ordered: Risk-On, Risk-Off, Neutral
+
+
+# ============================================================
+# Phase 2 (V5 2026-05-09): GMM with soft posterior
+# Reference: Li et al. 2024 JMLR [LR6] — rare-event mixture model
+# ============================================================
+
+@dataclass
+class SemanticGMM:
+    """Gaussian Mixture Model + semantic relabel + soft posterior.
+
+    Advantages over SemanticKMeans:
+      - Soft posterior P(regime | x) instead of hard label
+      - Multi-severity capture: COVID 0.95, GFC 0.7, normal 0.0
+      - Natural fit for Stage 3 soft fusion (Ting & Witten 1999 [N2])
+    """
+    n_components: int = 3
+    covariance_type: str = "full"   # full / tied / diag / spherical
+    random_state: int = 42
+
+    def fit(self, df_pretrain: pd.DataFrame):
+        """Fit scaler + GMM on pre-train derived features."""
+        X = df_pretrain[STAGE2_FEATURES].dropna().values
+        self.scaler_ = StandardScaler().fit(X)
+        Xs = self.scaler_.transform(X)
+        self.gmm_ = GaussianMixture(
+            n_components=self.n_components,
+            covariance_type=self.covariance_type,
+            random_state=self.random_state,
+            n_init=20,
+            max_iter=300,
+            reg_covar=1e-4,
+        ).fit(Xs)
+        # Centroids in original space (means_ → inverse scaler)
+        self.centroids_ = self.scaler_.inverse_transform(self.gmm_.means_)
+        # Semantic mapping (same logic as K-Means)
+        self.cluster_to_regime_ = self._semantic_relabel()
+        return self
+
+    def _semantic_relabel(self) -> dict[int, str]:
+        cent = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
+        risk_off_score = cent["VIX_zscore_long"] - cent["SP500_log_return_5d"] * 50
+        risk_on_score = -cent["VIX_zscore_long"] + cent["SP500_log_return_5d"] * 50
+
+        risk_off_idx = int(risk_off_score.idxmax())
+        risk_on_idx = int(risk_on_score.idxmax())
+        if risk_on_idx == risk_off_idx:
+            risk_off_idx = int(risk_off_score.drop(risk_on_idx).idxmax())
+        all_idx = set(range(self.n_components))
+        neutral_idx = (all_idx - {risk_on_idx, risk_off_idx}).pop()
+        return {risk_on_idx: "Risk-On", risk_off_idx: "Risk-Off", neutral_idx: "Neutral"}
+
+    def predict(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Predict regime — returns SOFT posterior P(regime | x) for each row."""
+        X = df[STAGE2_FEATURES]
+        valid_mask = X.notna().all(axis=1)
+        Xs = self.scaler_.transform(X[valid_mask].values)
+
+        # Soft posterior P(component | x)
+        proba = self.gmm_.predict_proba(Xs)   # (n_valid, n_components)
+
+        out = pd.DataFrame(index=df.index)
+        # P_<regime> in semantic order
+        for r in REGIME_LABELS:
+            out[f"P_{r}"] = np.nan
+        for cluster_idx, regime in self.cluster_to_regime_.items():
+            col = f"P_{regime}"
+            out.loc[valid_mask, col] = proba[:, cluster_idx]
+
+        # Hard label (argmax) for compatibility — only on valid rows
+        out["regime_label"] = None
+        valid_proba = out.loc[valid_mask, [f"P_{r}" for r in REGIME_LABELS]]
+        out.loc[valid_mask, "regime_label"] = valid_proba.idxmax(axis=1).str.replace("P_", "")
+        out["regime_cluster"] = pd.NA
+        cluster_ids_pred = self.gmm_.predict(Xs)
+        out.loc[valid_mask, "regime_cluster"] = cluster_ids_pred
+        return out
+
+    def centroid_summary(self) -> pd.DataFrame:
+        df = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
+        df.index = [self.cluster_to_regime_[i] for i in range(self.n_components)]
+        return df.loc[REGIME_LABELS]
