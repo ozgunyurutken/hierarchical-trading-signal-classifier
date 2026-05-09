@@ -19,11 +19,20 @@ from src.utils.helpers import setup_logger, save_csv
 
 logger = setup_logger(__name__)
 
-# Approximate FRED release delays (days after report period end)
+# BLS / Federal Reserve realistic release schedule (V5 onayı 2026-05-08).
+# Önceki V4 değerleri (CPI 45g, UNRATE 35g) ekstra-konservatifti.
+# Realistic schedule:
+#   CPI:      sonraki ayın 10-13. günü release → 14g lag
+#   UNRATE:   sonraki ayın 1. Cuması release → 7g lag
+#   FFR:      FOMC kararı anında → 1g lag
+#   M2 WM2NS: weekly + 2-hafta gecikme → 14g lag
+#   ICSA:     weekly + ~5g → 5g lag
+# Reference: López de Prado AFML 2018 [12] "use most recent publicly
+# available data with embargo equal to publication delay only".
 FRED_RELEASE_DELAYS = {
     "FEDFUNDS": 1,
-    "CPIAUCSL": 45,
-    "UNRATE": 35,
+    "CPIAUCSL": 14,
+    "UNRATE": 7,
     "WM2NS": 14,
     "ICSA": 5,
 }

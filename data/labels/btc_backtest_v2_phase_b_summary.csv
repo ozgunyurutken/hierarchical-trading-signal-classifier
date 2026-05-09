@@ -1,5 +1,0 @@
-,strategy,total_return,sharpe,max_dd,n_trades,win_rate
-2,v4 XGBOOST,0.4273,1.3522,-0.1141,13,0.8462
-3,v4 LIGHTGBM,0.2774,1.0584,-0.1141,10,0.9
-4,v4 RANDOM_FOREST,0.3815,1.2455,-0.1141,10,0.8
-0,Buy & Hold,0.4756,0.7514,-0.3215,1,
