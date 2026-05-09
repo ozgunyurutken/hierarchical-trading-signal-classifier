@@ -27,8 +27,19 @@ data:
       start_date: "2017-11-09"   # yfinance native start
       label: "ETH"
 
-  # Macro 2013-01-01: ~1.5 yıl warm-up + FRED daily DGS2 (2013'ten itibaren)
-  macro_start_date: "2013-01-01"
+  # Macro 2000-01-01 — Stage 2 K-Means pre-training için 25-yıllık macro tarihçe.
+  # Crypto data 2014/2017'den ama macro K-Means uzun cycle'larla fit edilir
+  # (dot-com 2000-02, GFC 2008-09, COVID 2020, Fed hike 2022).
+  # Literatür: Hatzius FCI 1970+, Hamilton HMM 1953+, Ang & Bekaert 1980+ — hepsi
+  # decade-scale macro veri ile cluster fit yapar.
+  macro_start_date: "2000-01-01"
+
+  # Macro pre-training: K-Means fit 2000-2025 macro-only, inference crypto-aligned'da
+  stage2_macro_pretrain:
+    enabled: true
+    start_date: "2000-01-01"
+    zscore_method: "long_term_static"   # mean+std 25-yıllık baseline (rolling değil)
+    zscore_baseline_window: "full_pretrain"   # use full pretrain as zscore reference
 
   # Timezone alignment
   macro_lag_days: 1

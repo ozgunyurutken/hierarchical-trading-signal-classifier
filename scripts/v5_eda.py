@@ -155,6 +155,86 @@ def plot_distributions(btc, eth, out: Path):
     print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
 
 
+def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
+    """25-yıllık (2000-2025) macro pre-train tarihçesi — Stage 2 K-Means fit window.
+    Crypto era highlighted; major regime events annotated."""
+    raw_dir = PROJECT_ROOT / "data" / "raw"
+    risk = pd.read_csv(raw_dir / "v5_macro_risk.csv", index_col=0, parse_dates=True)
+    com = pd.read_csv(raw_dir / "v5_macro_commodities.csv", index_col=0, parse_dates=True)
+    yld = pd.read_csv(raw_dir / "v5_macro_yields.csv", index_col=0, parse_dates=True)
+    fred = pd.read_csv(raw_dir / "v5_macro_fred_monthly.csv", index_col=0, parse_dates=True)
+
+    crypto_dt = pd.Timestamp(crypto_start)
+
+    fig, axes = plt.subplots(3, 3, figsize=(16, 10), sharex=True)
+    axes = axes.flatten()
+
+    panels = [
+        (axes[0], risk["SP500"], "S&P 500", "C0"),
+        (axes[1], risk["VIX"], "VIX (log)", "C1"),
+        (axes[2], risk["DXY"], "DXY", "C2"),
+        (axes[3], com["Gold"], "Gold", "C3"),
+        (axes[4], yld["US10Y"], "US 10Y Yield", "C4"),
+        (axes[5], yld["US2Y"], "US 2Y Yield (FRED DGS2)", "C5"),
+        (axes[6], fred["FEDFUNDS"], "FEDFUNDS", "C6"),
+        (axes[7], fred["CPIAUCSL"], "CPI Index", "C7"),
+        (axes[8], fred["UNRATE"], "UNRATE", "C8"),
+    ]
+
+    for ax, series, title, color in panels:
+        if title.startswith("VIX"):
+            ax.semilogy(series.index, series.values, lw=0.7, color=color)
+        else:
+            ax.plot(series.index, series.values, lw=0.7, color=color)
+
+        # Crypto-era shading (V5+ training start)
+        ax.axvspan(crypto_dt, series.index.max(), color="#ffe5b4", alpha=0.4)
+        ax.axvline(crypto_dt, color="black", ls=":", lw=0.7)
+        ax.set_title(title, fontsize=10, fontweight="bold")
+
+    # Major regime annotations on first panel
+    events = [
+        (pd.Timestamp("2000-03-10"), "dot-com peak", -0.05),
+        (pd.Timestamp("2008-09-15"), "Lehman", 0.10),
+        (pd.Timestamp("2020-03-23"), "COVID", -0.05),
+        (pd.Timestamp("2022-03-16"), "Fed hike\nbegins", 0.10),
+    ]
+    sp_ax = axes[0]
+    for date, label, ypos_frac in events:
+        if date < risk.index.max():
+            sp_ax.axvline(date, color="red", ls="--", lw=0.8, alpha=0.7)
+            ymin, ymax = sp_ax.get_ylim()
+            ypos = ymin + (ymax - ymin) * (0.85 + ypos_frac)
+            sp_ax.annotate(label, xy=(date, ypos), fontsize=7,
+                           ha="center", color="red",
+                           bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="red", lw=0.5))
+
+    # Add legend hint
+    handles = [
+        Patch(facecolor="#ffe5b4", alpha=0.4, label=f"Crypto era (V5+ training, post-{crypto_dt.year})"),
+        plt.Line2D([], [], color="red", ls="--", lw=0.8, label="Major regime events"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=9,
+               bbox_to_anchor=(0.5, -0.005))
+
+    for ax in axes[-3:]:
+        ax.xaxis.set_major_locator(mdates.YearLocator(3))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right", fontsize=9)
+
+    n_pretrain = (risk.index.max() - risk.index.min()).days
+    fig.suptitle(f"V5+ Macro Pre-Training Window — {risk.index.min().date()} → {risk.index.max().date()}  "
+                 f"(~{n_pretrain // 365} yıl, {len(risk)} gün)\n"
+                 f"Stage 2 K-Means cluster fit covers 4 büyük regime cycle: "
+                 f"dot-com bust + GFC 2008 + COVID 2020 + Fed hike 2022\n"
+                 f"Inference yapılırken sadece crypto era (highlighted) kullanılır",
+                 fontsize=11.5, fontweight="bold", y=0.998)
+    fig.tight_layout(rect=[0, 0.02, 1, 0.96])
+    fig.savefig(out, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
+
+
 def plot_correlation(btc, out: Path):
     """Correlation heatmap of all 15 columns on BTC."""
     fig, ax = plt.subplots(figsize=(11, 9))
@@ -223,8 +303,11 @@ def main():
     print("\n[1] Plot overview (price + train/val/test split)")
     plot_overview(btc, eth, reports / "v5_eda_overview.png")
 
-    print("\n[2] Plot macro panels (9 inputs)")
+    print("\n[2a] Plot macro panels (9 inputs, crypto-aligned 2014-2025)")
     plot_macro(btc, reports / "v5_eda_macro_panels.png")
+
+    print("\n[2b] Plot macro pre-train window (2000-2025, Stage 2 K-Means fit data)")
+    plot_macro_pretrain(reports / "v5_eda_macro_pretrain.png")
 
     print("\n[3] Plot return + volatility distributions")
     plot_distributions(btc, eth, reports / "v5_eda_distributions.png")
