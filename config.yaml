@@ -120,9 +120,10 @@ features:
     - "Parabolic_SAR_position"   # (close - SAR) / close
     - "log_ret_5d"               # short momentum context
 
-  # ----- Stage 2 input subset (proposal §2.3 — 7 raw + 3 derived = 10) -----
+  # ----- Stage 2 input subset (9 derived features, raw VIX excluded) -----
+  # VIX raw çıkarıldı: VIX_zscore_long ile lineer collinear (corr=1.0).
+  # Sadece long-term z-score kullanılır (stationary + interpretable).
   stage2_features:
-    - "VIX"                      # proposal core
     - "VIX_zscore_long"          # long-term static z-score (25-yıl baseline)
     - "SP500_log_return_5d"      # equity momentum proxy
     - "DXY_zscore_long"          # long-term static z-score
