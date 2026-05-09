@@ -81,7 +81,7 @@ def main():
         bear_velocity_entry_window=5,
         bear_velocity_entry_threshold=0.6,
         bear_velocity_entry_sp500_max=-0.015,
-        bear_reentry_min_neutral_dwell=15,              # 10 → 15 (Plan A)
+        bear_reentry_min_neutral_dwell=35,              # 15 → 35 (2025 Apr çift Bear önler)
         neutral_min_dwell=10,                           # YENİ (Plan A)
     ).fit(pretrain_clean)
 
