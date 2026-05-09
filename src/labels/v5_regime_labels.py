@@ -420,3 +420,163 @@ class SemanticSparseKMeans:
     def feature_weights_summary(self) -> pd.Series:
         return pd.Series(self.feature_weights_, index=STAGE2_FEATURES,
                          name="weight").sort_values(ascending=False)
+
+
+# ============================================================
+# Phase 4 (V5 2026-05-09): Constrained K-Means with crisis date priors
+# Reference: Wagstaff, Cardie, Rogers & Schroedl (2001) ICML [LR2]
+# Algorithm: COP-KMeans (Constrained K-Means)
+# ============================================================
+
+# NBER recession dates + major financial crisis events
+# These force the Risk-Off cluster to span multi-event severity
+CRISIS_DATE_RANGES = [
+    ("2001-03-01", "2001-11-30", "NBER dot-com recession"),
+    ("2008-09-01", "2009-06-30", "NBER GFC recession (Lehman aftermath)"),
+    ("2011-08-01", "2011-10-15", "US debt ceiling + Eurozone crisis"),
+    ("2015-08-15", "2016-02-15", "China devaluation + oil crash"),
+    ("2018-10-01", "2018-12-31", "Q4 2018 sell-off"),
+    ("2020-02-20", "2020-04-30", "COVID crash"),
+    ("2022-02-01", "2022-10-31", "Fed hike + Ukraine war"),
+]
+
+
+def build_must_link_anchors(index: pd.DatetimeIndex) -> list[list[int]]:
+    """For each crisis range, return list of row indices that share must-link
+    constraint (transitive closure: all anchors of one crisis are same cluster)."""
+    anchor_groups = []
+    for start, end, _label in CRISIS_DATE_RANGES:
+        mask = (index >= pd.Timestamp(start)) & (index <= pd.Timestamp(end))
+        idxs = np.where(mask)[0].tolist()
+        if len(idxs) >= 2:
+            anchor_groups.append(idxs)
+    return anchor_groups
+
+
+def cop_kmeans(X: np.ndarray, k: int, must_link_groups: list[list[int]],
+               max_iter: int = 100, random_state: int = 42) -> tuple[np.ndarray, np.ndarray]:
+    """COP-KMeans (Wagstaff 2001).
+    must_link_groups: list of index-lists; all indices in a group must share cluster.
+    Returns (labels, centroids)."""
+    rng = np.random.default_rng(random_state)
+    n, p = X.shape
+
+    # Build must-link membership: each anchor → group_id (transitive closure)
+    point_to_group = {}
+    for gid, group in enumerate(must_link_groups):
+        for idx in group:
+            point_to_group[idx] = gid
+
+    # Init centroids via standard K-Means++
+    init_km = KMeans(n_clusters=k, random_state=random_state, n_init=5).fit(X)
+    centroids = init_km.cluster_centers_.copy()
+
+    for it in range(max_iter):
+        # Assign each must-link group as a whole → cluster minimizing aggregate distance
+        labels = np.full(n, -1, dtype=int)
+        # Process must-link groups first
+        for gid, group in enumerate(must_link_groups):
+            group_mean = X[group].mean(axis=0)
+            distances = np.linalg.norm(centroids - group_mean, axis=1)
+            best_c = int(distances.argmin())
+            labels[group] = best_c
+        # Process remaining points
+        for i in range(n):
+            if labels[i] != -1:
+                continue
+            distances = np.linalg.norm(centroids - X[i], axis=1)
+            labels[i] = int(distances.argmin())
+
+        # Update centroids
+        new_centroids = np.array([
+            X[labels == c].mean(axis=0) if (labels == c).any() else centroids[c]
+            for c in range(k)
+        ])
+        if np.allclose(centroids, new_centroids, atol=1e-6):
+            break
+        centroids = new_centroids
+
+    return labels, centroids
+
+
+@dataclass
+class SemanticConstrainedKMeans:
+    """COP-KMeans (Wagstaff 2001) + semantic relabel.
+
+    Crisis date prior: NBER recessions + major events → must-link Risk-Off.
+    The cluster these anchors land in gets Risk-Off label automatically
+    (since crisis VIX/FFR/SP500 patterns dominate that centroid).
+    """
+    n_clusters: int = 3
+    random_state: int = 42
+
+    def fit(self, df_pretrain: pd.DataFrame):
+        df = df_pretrain.dropna(subset=STAGE2_FEATURES)
+        X = df[STAGE2_FEATURES].values
+        self.scaler_ = StandardScaler().fit(X)
+        Xs = self.scaler_.transform(X)
+        # Build must-link anchors from CRISIS_DATE_RANGES
+        anchor_groups = build_must_link_anchors(df.index)
+        # Note: in COP-KMeans, all anchors across ALL crises must form one
+        # combined group (transitive: 2008 ≈ 2020 same cluster) → flatten.
+        flat_anchors = [idx for grp in anchor_groups for idx in grp]
+        combined_group = [flat_anchors] if flat_anchors else []
+        n_anchors = len(flat_anchors)
+
+        labels, centroids_scaled = cop_kmeans(
+            Xs, k=self.n_clusters,
+            must_link_groups=combined_group,
+            random_state=self.random_state,
+        )
+        self.labels_pretrain_ = labels
+        self.kmeans_centroids_scaled_ = centroids_scaled
+        # Centroids in original space
+        self.centroids_ = self.scaler_.inverse_transform(centroids_scaled)
+        # Force a fitted KMeans-like object for predict reuse
+        self.cluster_to_regime_ = self._semantic_relabel(labels, anchor_groups)
+        self.n_anchors_ = n_anchors
+        return self
+
+    def _semantic_relabel(self, labels: np.ndarray,
+                          anchor_groups: list[list[int]]) -> dict[int, str]:
+        """Find which cluster the crisis anchors landed in → Risk-Off.
+        Then standard VIX/SP500 logic for Risk-On / Neutral on remaining."""
+        all_anchor_idx = [idx for grp in anchor_groups for idx in grp]
+        # Vote by majority among anchors
+        anchor_clusters = labels[all_anchor_idx]
+        risk_off_idx = int(np.bincount(anchor_clusters,
+                                       minlength=self.n_clusters).argmax())
+        # Risk-On / Neutral on remaining: lowest VIX_z + highest SP500 → Risk-On
+        cent = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
+        remaining = [c for c in range(self.n_clusters) if c != risk_off_idx]
+        risk_on_score = (-cent.loc[remaining, "VIX_zscore_long"]
+                         + cent.loc[remaining, "SP500_log_return_5d"] * 50)
+        risk_on_idx = int(risk_on_score.idxmax())
+        neutral_idx = [c for c in remaining if c != risk_on_idx][0]
+        return {risk_on_idx: "Risk-On", risk_off_idx: "Risk-Off",
+                neutral_idx: "Neutral"}
+
+    def predict(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Predict via nearest scaled centroid (no constraint enforcement on test)."""
+        X = df[STAGE2_FEATURES]
+        valid_mask = X.notna().all(axis=1)
+        Xs = self.scaler_.transform(X[valid_mask].values)
+        # Distance to each scaled centroid
+        d = np.linalg.norm(Xs[:, None, :] - self.kmeans_centroids_scaled_[None, :, :], axis=2)
+        cluster_ids = d.argmin(axis=1)
+
+        out = pd.DataFrame(index=df.index)
+        out["regime_cluster"] = pd.NA
+        out.loc[valid_mask, "regime_cluster"] = cluster_ids
+        out["regime_label"] = out["regime_cluster"].map(
+            lambda c: self.cluster_to_regime_.get(c) if pd.notna(c) else None
+        )
+        for r in REGIME_LABELS:
+            out[f"P_{r}"] = (out["regime_label"] == r).astype(float)
+        out.loc[~valid_mask, [f"P_{r}" for r in REGIME_LABELS]] = np.nan
+        return out
+
+    def centroid_summary(self) -> pd.DataFrame:
+        df = pd.DataFrame(self.centroids_, columns=STAGE2_FEATURES)
+        df.index = [self.cluster_to_regime_[i] for i in range(self.n_clusters)]
+        return df.loc[REGIME_LABELS]
