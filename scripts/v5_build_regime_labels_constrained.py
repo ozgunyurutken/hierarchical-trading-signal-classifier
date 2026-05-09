@@ -1,5 +1,5 @@
 """
-V5 Phase 4 — Constrained K-Means (Wagstaff 2001 [LR2]).
+V5 Phase 2.1 — Constrained K-Means (Wagstaff 2001 [LR2]).
 
 Crisis date priors (must-link anchors): NBER recessions + major events
 all forced into same cluster → Risk-Off.
@@ -15,9 +15,9 @@ Anchor periods (Risk-Off must-link):
 
 Outputs:
   data/processed/{btc,eth,macro_pretrain}_regime_labels_constrained_v5.csv
-  reports/Phase2/v5_p4_constrained_centroids.png
-  reports/Phase2/v5_p4_constrained_timeline.png
-  reports/Phase2/v5_p4_constrained_distribution.png
+  reports/Phase2/v5_p2.1_constrained_centroids.png
+  reports/Phase2/v5_p2.1_constrained_timeline.png
+  reports/Phase2/v5_p2.1_constrained_distribution.png
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def plot_centroids(model, out: Path):
     ax.axhline(0, color="black", lw=0.6)
     ax.set_xticks(x); ax.set_xticklabels(STAGE2_FEATURES, rotation=20, ha="right", fontsize=9)
     ax.set_ylabel("Centroid value (original units)")
-    ax.set_title(f"V5 Phase 4 — Constrained K-Means Centroids per Regime\n"
+    ax.set_title(f"V5 Phase 2.1 — Constrained K-Means Centroids per Regime\n"
                  f"COP-KMeans with {model.n_anchors_} crisis-date must-link anchors "
                  f"({len(CRISIS_DATE_RANGES)} crisis ranges)",
                  fontsize=11.5, fontweight="bold")
@@ -142,7 +142,7 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
                          label="Crisis anchor periods (must-link)"))
     fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=10,
                bbox_to_anchor=(0.5, -0.005))
-    fig.suptitle("V5 Phase 4 — Constrained K-Means Regime Timeline",
+    fig.suptitle("V5 Phase 2.1 — Constrained K-Means Regime Timeline",
                  fontsize=12, fontweight="bold", y=0.998)
     fig.tight_layout(rect=[0, 0.025, 1, 0.96])
     fig.savefig(out, bbox_inches="tight"); plt.close(fig)
@@ -162,7 +162,7 @@ def plot_distribution(btc_r, eth_r, pre_r, out: Path):
                color=[REGIME_COLORS[r] for r in REGIME_LABELS],
                edgecolor="black", lw=0.5)
     ax.set_xlabel("% of days"); ax.set_xlim(0, 100)
-    ax.set_title("V5 Phase 4 — Constrained K-Means Regime Distribution",
+    ax.set_title("V5 Phase 2.1 — Constrained K-Means Regime Distribution",
                  fontsize=12, fontweight="bold")
     for i, period in enumerate(pivot.index):
         cum = 0
@@ -189,7 +189,7 @@ def diagnostics(pre_r, btc_r):
 
 
 def main():
-    print("V5 Phase 4 — Constrained K-Means (Wagstaff 2001 [LR2])")
+    print("V5 Phase 2.1 — Constrained K-Means (Wagstaff 2001 [LR2])")
     print("=" * 70)
     proc = PROJECT_ROOT / "data" / "processed"
     reports = PROJECT_ROOT / "reports"
@@ -210,7 +210,7 @@ def main():
     print(f"\nCentroids:")
     print(model.centroid_summary().round(3).to_string())
 
-    plot_centroids(model, reports / "Phase2" / "v5_p4_constrained_centroids.png")
+    plot_centroids(model, reports / "Phase2" / "v5_p2.1_constrained_centroids.png")
 
     print(f"\n[2] Inference")
     pre_r = model.predict(pretrain)
@@ -224,12 +224,12 @@ def main():
     plot_timeline(btc["Close"].loc[btc_r.index],
                   eth["Close"].loc[eth_r.index],
                   btc_r, eth_r, pre_r,
-                  reports / "Phase2" / "v5_p4_constrained_timeline.png")
+                  reports / "Phase2" / "v5_p2.1_constrained_timeline.png")
     plot_distribution(btc_r, eth_r, pre_r,
-                      reports / "Phase2" / "v5_p4_constrained_distribution.png")
+                      reports / "Phase2" / "v5_p2.1_constrained_distribution.png")
 
     print("\n" + "=" * 70)
-    print("V5 Phase 4 complete.")
+    print("V5 Phase 2.1 complete.")
     print("\nDistribution:")
     for label, df in [("Pre-train", pre_r), ("BTC era", btc_r), ("ETH era", eth_r)]:
         c = df["regime_label"].value_counts()
