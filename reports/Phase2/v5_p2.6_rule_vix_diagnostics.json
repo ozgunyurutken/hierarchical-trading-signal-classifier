@@ -1,0 +1,33 @@
+{
+  "phase": "V5 Phase 2.6 \u2014 Rule-based VIX Threshold Classifier",
+  "method": "VIX_zscore_long threshold + persistence filter",
+  "thresholds": {
+    "bear": 1.0,
+    "bull": -0.5
+  },
+  "persistence_days": 7,
+  "pretrain_vix_z_stats": {
+    "mean": 1.8436609390207524e-16,
+    "std": 1.0,
+    "p10": -0.9151854854529649,
+    "p50": -0.2446350997367138,
+    "p90": 1.176595844485615
+  },
+  "distribution_pct": {
+    "pretrain": {
+      "Bull": 37.04850361197111,
+      "Neutral": 52.18929677134011,
+      "Bear": 10.76219961668878
+    },
+    "btc": {
+      "Bull": 43.795798729848556,
+      "Neutral": 49.97557401074744,
+      "Bear": 6.228627259404005
+    },
+    "eth": {
+      "Bull": 32.7580372250423,
+      "Neutral": 58.612521150592215,
+      "Bear": 8.629441624365482
+    }
+  }
+}

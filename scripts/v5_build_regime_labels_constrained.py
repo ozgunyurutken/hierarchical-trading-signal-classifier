@@ -34,7 +34,8 @@ import pandas as pd
 from matplotlib.patches import Patch
 
 from src.labels.v5_regime_labels import (
-    SemanticConstrainedKMeans, STAGE2_FEATURES, REGIME_LABELS, CRISIS_DATE_RANGES,
+    SemanticConstrainedKMeans, STAGE2_FEATURES, REGIME_LABELS,
+    CRISIS_DATE_RANGES, RISK_ON_DATE_RANGES, NEUTRAL_DATE_RANGES,
 )
 
 plt.rcParams.update({"figure.dpi": 130, "font.size": 10,
@@ -55,25 +56,38 @@ def plot_centroids(model, out: Path):
     ax.axhline(0, color="black", lw=0.6)
     ax.set_xticks(x); ax.set_xticklabels(STAGE2_FEATURES, rotation=20, ha="right", fontsize=9)
     ax.set_ylabel("Centroid value (original units)")
-    ax.set_title(f"V5 Phase 2.1 — Constrained K-Means Centroids per Regime\n"
-                 f"COP-KMeans with {model.n_anchors_} crisis-date must-link anchors "
-                 f"({len(CRISIS_DATE_RANGES)} crisis ranges)",
+    ax.set_title(f"V5 Phase 2.1 — Triple Constrained K-Means Centroids per Regime\n"
+                 f"COP-KMeans: {model.n_riskoff_anchors_} Risk-Off + "
+                 f"{model.n_riskon_anchors_} Risk-On + "
+                 f"{model.n_neutral_anchors_} Neutral must-link",
                  fontsize=11.5, fontweight="bold")
     ax.legend(loc="best", fontsize=10)
     fig.tight_layout(); fig.savefig(out, bbox_inches="tight"); plt.close(fig)
     print(f"  saved: {out.relative_to(PROJECT_ROOT)}")
 
 
-def _shade_anchors(ax, crisis_ranges=CRISIS_DATE_RANGES):
-    """Subplot height boyu silik darkred fill + başlangıç/bitiş dashed çizgileri.
-
-    Phase 2.1+ anchor visualization: renkler üst üste gözüksün, anchor
-    başlangıç ve bitiş tarihleri net olsun (alpha=0.10 fill + alpha=0.6 lines)."""
-    for start, end, _label in crisis_ranges:
+def _shade_anchors(ax, riskoff_ranges=CRISIS_DATE_RANGES,
+                   riskon_ranges=RISK_ON_DATE_RANGES,
+                   neutral_ranges=NEUTRAL_DATE_RANGES):
+    """Triple anchor visualization:
+       - Risk-Off (crisis): darkred fill (alpha=0.10) + dashed sınır
+       - Risk-On (calm bull): darkgreen fill (alpha=0.08) + dotted sınır
+       - Neutral (transition): darkorange fill (alpha=0.08) + dashdot sınır"""
+    for start, end, _label in riskoff_ranges:
         s, e = pd.Timestamp(start), pd.Timestamp(end)
         ax.axvspan(s, e, color="darkred", alpha=0.10, zorder=0)
         ax.axvline(s, color="darkred", alpha=0.6, lw=0.8, ls="--", zorder=1)
         ax.axvline(e, color="darkred", alpha=0.6, lw=0.8, ls="--", zorder=1)
+    for start, end, _label in riskon_ranges:
+        s, e = pd.Timestamp(start), pd.Timestamp(end)
+        ax.axvspan(s, e, color="darkgreen", alpha=0.08, zorder=0)
+        ax.axvline(s, color="darkgreen", alpha=0.6, lw=0.8, ls=":", zorder=1)
+        ax.axvline(e, color="darkgreen", alpha=0.6, lw=0.8, ls=":", zorder=1)
+    for start, end, _label in neutral_ranges:
+        s, e = pd.Timestamp(start), pd.Timestamp(end)
+        ax.axvspan(s, e, color="darkorange", alpha=0.08, zorder=0)
+        ax.axvline(s, color="darkorange", alpha=0.6, lw=0.8, ls="-.", zorder=1)
+        ax.axvline(e, color="darkorange", alpha=0.6, lw=0.8, ls="-.", zorder=1)
 
 
 def _shade(ax, price, regime, log=False, lw=1.0):
@@ -147,19 +161,22 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
     axes[2].set_title("ETH + Constrained K-Means regime + anchor periods",
                       fontsize=10, fontweight="bold")
 
-    # 3. Pre-train regime band only
-    _shade_anchors(axes[3])
+    # 3. Pre-train regime band only (NO anchors — clear comparison reference)
     pre_close = pd.Series(1.0, index=pre_r.index)
     _shade(axes[3], pre_close, pre_r["regime_label"], log=False, lw=0.2)
     axes[3].set_yticks([]); axes[3].grid(False)
-    axes[3].set_title("Pre-train regime band only (compact)",
+    axes[3].set_title("Pre-train regime band only (compact, no anchors)",
                       fontsize=10, fontweight="bold")
 
     axes[-1].xaxis.set_major_locator(mdates.YearLocator(2))
     axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     handles = [Patch(facecolor=c, alpha=0.5, label=r) for r, c in REGIME_COLORS.items()]
     handles.append(Patch(facecolor="darkred", alpha=0.4,
-                         label="Crisis anchor periods (must-link)"))
+                         label="Risk-Off anchors (crisis)"))
+    handles.append(Patch(facecolor="darkgreen", alpha=0.4,
+                         label="Risk-On anchors (calm bull)"))
+    handles.append(Patch(facecolor="darkorange", alpha=0.4,
+                         label="Neutral anchors (transition)"))
     fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=10,
                bbox_to_anchor=(0.5, -0.005))
     fig.suptitle("V5 Phase 2.1 — Constrained K-Means Regime Timeline",
@@ -197,15 +214,31 @@ def plot_distribution(btc_r, eth_r, pre_r, out: Path):
 
 
 def diagnostics(pre_r, btc_r):
-    """Crisis date capture check."""
-    print("\nCrisis capture diagnostics:")
+    """Triple anchor capture check — Risk-Off + Risk-On + Neutral."""
+    print("\nRisk-Off anchor capture (crisis):")
     for start, end, label in CRISIS_DATE_RANGES:
         s, e = pd.Timestamp(start), pd.Timestamp(end)
         slice_ = pre_r[(pre_r.index >= s) & (pre_r.index <= e)]
         if len(slice_) == 0:
             continue
         risk_off_pct = (slice_["regime_label"] == "Risk-Off").mean() * 100
-        print(f"  {label[:35]:35s} ({start} → {end}): {risk_off_pct:.1f}% Risk-Off ({len(slice_)} bday)")
+        print(f"  {label[:38]:38s} ({start} → {end}): {risk_off_pct:.1f}% Risk-Off ({len(slice_)} bday)")
+    print("\nRisk-On anchor capture (calm bull):")
+    for start, end, label in RISK_ON_DATE_RANGES:
+        s, e = pd.Timestamp(start), pd.Timestamp(end)
+        slice_ = pre_r[(pre_r.index >= s) & (pre_r.index <= e)]
+        if len(slice_) == 0:
+            continue
+        risk_on_pct = (slice_["regime_label"] == "Risk-On").mean() * 100
+        print(f"  {label[:38]:38s} ({start} → {end}): {risk_on_pct:.1f}% Risk-On ({len(slice_)} bday)")
+    print("\nNeutral anchor capture (transition):")
+    for start, end, label in NEUTRAL_DATE_RANGES:
+        s, e = pd.Timestamp(start), pd.Timestamp(end)
+        slice_ = pre_r[(pre_r.index >= s) & (pre_r.index <= e)]
+        if len(slice_) == 0:
+            continue
+        neutral_pct = (slice_["regime_label"] == "Neutral").mean() * 100
+        print(f"  {label[:38]:38s} ({start} → {end}): {neutral_pct:.1f}% Neutral ({len(slice_)} bday)")
 
 
 def main():
@@ -223,9 +256,14 @@ def main():
     btc = pd.read_csv(proc / "btc_aligned_v5.csv", index_col=0, parse_dates=True)
     eth = pd.read_csv(proc / "eth_aligned_v5.csv", index_col=0, parse_dates=True)
 
-    print(f"\n[1] Fit Constrained K-Means k=3 with {len(CRISIS_DATE_RANGES)} crisis ranges")
+    print(f"\n[1] Fit Triple Constrained K-Means k=3:")
+    print(f"     {len(CRISIS_DATE_RANGES)} Risk-Off + "
+          f"{len(RISK_ON_DATE_RANGES)} Risk-On + "
+          f"{len(NEUTRAL_DATE_RANGES)} Neutral ranges")
     model = SemanticConstrainedKMeans(n_clusters=3, random_state=42).fit(pretrain)
-    print(f"  Anchors: {model.n_anchors_} bdays must-link → Risk-Off cluster")
+    print(f"  Anchors: {model.n_riskoff_anchors_} bdays → Risk-Off cluster")
+    print(f"           {model.n_riskon_anchors_} bdays → Risk-On cluster")
+    print(f"           {model.n_neutral_anchors_} bdays → Neutral cluster")
     print(f"  cluster → regime: {model.cluster_to_regime_}")
     print(f"\nCentroids:")
     print(model.centroid_summary().round(3).to_string())

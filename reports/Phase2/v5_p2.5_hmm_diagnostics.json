@@ -1,0 +1,62 @@
+{
+  "phase": "V5 Phase 2.5 \u2014 3-state Gaussian HMM (Hamilton 1989)",
+  "method": "hmmlearn GaussianHMM full covariance",
+  "feature_subset": [
+    "VIX_zscore_long",
+    "SP500_log_return_5d"
+  ],
+  "n_states": 3,
+  "covariance_type": "full",
+  "random_state": 42,
+  "state_to_regime": {
+    "0": "Bull",
+    "1": "Neutral",
+    "2": "Bear"
+  },
+  "centroids_original_units": {
+    "VIX_zscore_long": {
+      "Bull": -0.5993,
+      "Neutral": -0.5956,
+      "Bear": 0.8483
+    },
+    "SP500_log_return_5d": {
+      "Bull": 0.0035,
+      "Neutral": 0.0033,
+      "Bear": -0.002
+    }
+  },
+  "transition_matrix": {
+    "Bull": {
+      "Bull": 0.004575,
+      "Neutral": 0.958862,
+      "Bear": 0.009091
+    },
+    "Neutral": {
+      "Bull": 0.995201,
+      "Neutral": 0.022876,
+      "Bear": 0.00456
+    },
+    "Bear": {
+      "Bull": 0.000224,
+      "Neutral": 0.018261,
+      "Bear": 0.986348
+    }
+  },
+  "distribution_pct": {
+    "pretrain": {
+      "Bull": 29.580997344349363,
+      "Neutral": 29.580997344349363,
+      "Bear": 40.838005311301266
+    },
+    "btc": {
+      "Bull": 33.46360527601368,
+      "Neutral": 33.78114313629702,
+      "Bear": 32.7552515876893
+    },
+    "eth": {
+      "Bull": 29.610829103214893,
+      "Neutral": 29.915397631133672,
+      "Bear": 40.47377326565144
+    }
+  }
+}

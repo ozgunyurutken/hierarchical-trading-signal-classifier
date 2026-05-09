@@ -181,13 +181,12 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
     axes[2].set_title("ETH + Sparse K-Means regime + anchor periods",
                       fontsize=10, fontweight="bold")
 
-    # Panel 3 — pretrain regime band only
-    _shade_anchors(axes[3])
+    # Panel 3 — pretrain regime band only (NO anchors — clear comparison reference)
     pre_close = pd.Series(1.0, index=pre_r.index)
     _shade_regimes(axes[3], pre_close, pre_r["regime_label"], log=False, lw=0.2)
     axes[3].set_yticks([])
     axes[3].grid(False)
-    axes[3].set_title("Pre-train regime band only (compact)",
+    axes[3].set_title("Pre-train regime band only (compact, no anchors)",
                       fontsize=10, fontweight="bold")
 
     axes[-1].xaxis.set_major_locator(mdates.YearLocator(2))
