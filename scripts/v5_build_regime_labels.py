@@ -294,8 +294,9 @@ def main():
     # ---- Inference on pre-train + BTC + ETH ----
     print("\n[3] Inference (pre-train + BTC + ETH)")
     pretrain_regime = model.predict(pretrain)
-    btc_regime = model.predict(btc_macro)
-    eth_regime = model.predict(eth_macro)
+    # BTC/ETH regime via pretrain reindex (avoids warm-up NaN + weekends)
+    btc_regime = pretrain_regime.reindex(btc.index, method="ffill")
+    eth_regime = pretrain_regime.reindex(eth.index, method="ffill")
 
     # Save labels
     pretrain_regime.to_csv(proc / "macro_pretrain_regime_labels_v5.csv")

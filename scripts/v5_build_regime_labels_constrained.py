@@ -115,10 +115,14 @@ def plot_timeline(btc_close, eth_close, btc_r, eth_r, pre_r, out: Path):
     lines1, labs1 = ax.get_legend_handles_labels()
     lines2, labs2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labs1 + labs2, loc="upper left", fontsize=8)
-    # Mark crisis date ranges
+    # Mark crisis date ranges as top-edge bar (NOT background, avoids clash
+    # with regime shading which already uses 3 colors).
+    ymin, ymax = ax.get_ylim()
+    bar_y = ymax * 0.97
+    bar_h = ymax * 0.03
     for start, end, _label in CRISIS_DATE_RANGES:
         s, e = pd.Timestamp(start), pd.Timestamp(end)
-        ax.axvspan(s, e, color="darkred", alpha=0.10, lw=0)
+        ax.fill_between([s, e], bar_y, ymax, color="darkred", alpha=0.85, lw=0)
 
     # 1. BTC
     _shade(axes[1], btc_close, btc_r["regime_label"], log=True, lw=1.0)
@@ -216,10 +220,12 @@ def main():
 
     plot_centroids(model, reports / "Phase2" / "v5_p2.1_constrained_centroids.png")
 
-    print(f"\n[2] Inference")
+    print(f"\n[2] Inference (BTC/ETH via pretrain reindex — avoids warm-up NaN + weekends)")
     pre_r = model.predict(pretrain)
-    btc_r = model.predict(btc_macro)
-    eth_r = model.predict(eth_macro)
+    # BTC/ETH regime: reindex pretrain regime to crypto trading days, ffill
+    # weekends → Friday's regime (macro doesn't change on weekends).
+    btc_r = pre_r.reindex(btc.index, method="ffill")
+    eth_r = pre_r.reindex(eth.index, method="ffill")
     pre_r.to_csv(proc / "macro_pretrain_regime_labels_constrained_v5.csv")
     btc_r.to_csv(proc / "btc_regime_labels_constrained_v5.csv")
     eth_r.to_csv(proc / "eth_regime_labels_constrained_v5.csv")
