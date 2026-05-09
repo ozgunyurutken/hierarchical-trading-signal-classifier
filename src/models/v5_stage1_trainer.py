@@ -61,7 +61,8 @@ def walk_forward_splits(n: int, cfg: WalkForwardConfig) -> Iterator[tuple[np.nda
 
 # ---------- Model factories ----------
 
-def make_xgboost(random_state: int = 42):
+def make_xgboost(random_state: int = 42, balanced: bool = False):
+    # XGBoost has no class_weight; we apply sample_weight at fit time.
     return xgb.XGBClassifier(
         objective="multi:softprob",
         num_class=3,
@@ -77,7 +78,7 @@ def make_xgboost(random_state: int = 42):
     )
 
 
-def make_lightgbm(random_state: int = 42):
+def make_lightgbm(random_state: int = 42, balanced: bool = False):
     return lgb.LGBMClassifier(
         objective="multiclass",
         num_class=3,
@@ -90,20 +91,24 @@ def make_lightgbm(random_state: int = 42):
         random_state=random_state,
         n_jobs=-1,
         verbose=-1,
+        class_weight="balanced" if balanced else None,
     )
 
 
-def make_random_forest(random_state: int = 42):
+def make_random_forest(random_state: int = 42, balanced: bool = False):
     return RandomForestClassifier(
         n_estimators=300,
         max_depth=12,
         min_samples_leaf=5,
         n_jobs=-1,
         random_state=random_state,
+        class_weight="balanced" if balanced else None,
     )
 
 
-def make_mlp(random_state: int = 42):
+def make_mlp(random_state: int = 42, balanced: bool = False):
+    # sklearn MLPClassifier doesn't support class_weight; balanced flag is
+    # noted but not applied. Limitation logged in paper.
     return MLPClassifier(
         hidden_layer_sizes=(64, 32),
         activation="relu",
@@ -145,10 +150,28 @@ class FoldResult:
     f1_uptrend: float
 
 
+def _balanced_sample_weight(y_idx: np.ndarray) -> np.ndarray:
+    """Inverse-frequency sample weights for balanced loss (used by XGBoost)."""
+    classes, counts = np.unique(y_idx, return_counts=True)
+    n = len(y_idx)
+    n_classes = len(classes)
+    freq = {c: counts[i] for i, c in enumerate(classes)}
+    return np.array([n / (n_classes * freq[v]) for v in y_idx], dtype=float)
+
+
 def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
                        cfg: WalkForwardConfig | None = None,
-                       random_state: int = 42) -> tuple[pd.DataFrame, list[FoldResult]]:
+                       random_state: int = 42,
+                       balanced: bool = False) -> tuple[pd.DataFrame, list[FoldResult]]:
     """Walk-forward CV training. Returns OOF predictions DataFrame + per-fold results.
+
+    Parameters
+    ----------
+    balanced : bool, default False
+        If True, applies balanced class weighting:
+          - LightGBM, RandomForest: class_weight="balanced" via sklearn API
+          - XGBoost: inverse-frequency sample_weight at fit time
+          - MLP: not supported by sklearn (ignored, paper limitation)
 
     OOF DataFrame columns: ['P_downtrend', 'P_range', 'P_uptrend', 'pred_label', 'true_label', 'fold']
     indexed by date; rows present only for val periods of any fold.
@@ -170,14 +193,18 @@ def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
         X_val, y_val = X_arr[val_idx], y_idx[val_idx]
 
         if model_name in TREE_MODELS:
-            model = MODEL_FACTORIES[model_name](random_state=random_state)
-            model.fit(X_tr, y_tr)
+            model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced)
+            if model_name == "xgboost" and balanced:
+                sw = _balanced_sample_weight(y_tr)
+                model.fit(X_tr, y_tr, sample_weight=sw)
+            else:
+                model.fit(X_tr, y_tr)
             proba = model.predict_proba(X_val)
         else:
             scaler = StandardScaler().fit(X_tr)
             X_tr_s = scaler.transform(X_tr)
             X_val_s = scaler.transform(X_val)
-            model = MODEL_FACTORIES[model_name](random_state=random_state)
+            model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced)
             model.fit(X_tr_s, y_tr)
             proba = model.predict_proba(X_val_s)
 

@@ -6,6 +6,10 @@ Outputs:
   reports/Phase3/v5_p3_stage1_overall.csv             — overall metrics summary
 
 Models: xgboost, lightgbm, random_forest, mlp (fixed hyperparameters).
+ZigZag config: deviation_pct=0.10, min_segment_days=15, range_amplitude=0.075
+  (param-sweep D, balances 3-class better than baseline)
+class_weight=balanced applied to LightGBM/RandomForest (sklearn API);
+  XGBoost uses inverse-frequency sample_weight; MLP unsupported, raw.
 """
 from __future__ import annotations
 
@@ -44,7 +48,7 @@ def main():
 
         for model_name in MODELS:
             t0 = time.time()
-            oof, folds = train_walk_forward(X, y, model_name)
+            oof, folds = train_walk_forward(X, y, model_name, balanced=True)
             dt = time.time() - t0
 
             oof_path = proc / f"{asset}_stage1_oof_{model_name}_v5.csv"

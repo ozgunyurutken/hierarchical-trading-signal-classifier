@@ -21,8 +21,8 @@ from src.features.v5_trend_features import build_stage1_features, STAGE1_FEATURE
 from src.labels.v5_trend_labels import zigzag_trend_label
 
 DEV_PCT = 0.10
-MIN_SEG = 10
-AMP = 0.05
+MIN_SEG = 15
+AMP = 0.075
 
 
 def build(asset: str):
