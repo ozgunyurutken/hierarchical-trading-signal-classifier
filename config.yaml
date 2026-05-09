@@ -120,9 +120,11 @@ features:
     - "Parabolic_SAR_position"   # (close - SAR) / close
     - "log_ret_5d"               # short momentum context
 
-  # ----- Stage 2 input subset (9 derived features, raw VIX excluded) -----
-  # VIX raw çıkarıldı: VIX_zscore_long ile lineer collinear (corr=1.0).
-  # Sadece long-term z-score kullanılır (stationary + interpretable).
+  # ----- Stage 2 input subset (8 derived features) -----
+  # VIX raw çıkarıldı: VIX_zscore_long ile lineer collinear.
+  # UNRATE_change_180d çıkarıldı (2026-05-09 Phase 1 fix):
+  #   Risk-Off cluster centroid'inde +1.69 dominant idi, sadece COVID 2020
+  #   yakalanıyordu. 2008 GFC, 2002 dot-com, 2022 hike Neutral'a düşüyordu.
   stage2_features:
     - "VIX_zscore_long"          # long-term static z-score (25-yıl baseline)
     - "SP500_log_return_5d"      # equity momentum proxy
@@ -130,10 +132,10 @@ features:
     - "Gold_log_return_20d"
     - "FEDFUNDS_change_60d"      # 3-mo FFR change (rate-of-change per proposal)
     - "CPI_yoy_change"           # 252-day CPI YoY
-    - "UNRATE_change_180d"       # 6-mo unemployment change
     - "Yield_Curve_10Y_2Y"       # derived spread
-    - "M2_yoy_change"            # M2 likidite (2026-05-08 onayı)
+    - "M2_yoy_change"            # M2 likidite
     # Optional ablation: Gold_Silver_Ratio
+    # Removed: UNRATE_change_180d (Phase 1 fix), VIX raw (collinearity)
 
   # ----- Stage 3 input subset (proposal §3 — short-term oscillators only) -----
   stage3_oscillator_features:

@@ -31,7 +31,7 @@ plt.rcParams.update({"figure.dpi": 130, "font.size": 10, "axes.spines.top": Fals
 
 # Stage 2 final features (config.yaml > stage2_features)
 # NOT: VIX raw çıkarıldı — VIX_zscore_long ile lineer collinear (corr=1.0).
-# Sadece z-score kullanılır (interpretable + stationary).
+# 2026-05-09 Phase 1 fix: UNRATE_change_180d çıkarıldı (Risk-Off COVID-only fix)
 STAGE2_FEATURES = [
     "VIX_zscore_long",
     "SP500_log_return_5d",
@@ -39,7 +39,6 @@ STAGE2_FEATURES = [
     "Gold_log_return_20d",
     "FEDFUNDS_change_60d",
     "CPI_yoy_change",
-    "UNRATE_change_180d",
     "Yield_Curve_10Y_2Y",
     "M2_yoy_change",
 ]

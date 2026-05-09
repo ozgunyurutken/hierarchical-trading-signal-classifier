@@ -30,6 +30,10 @@ from sklearn.preprocessing import StandardScaler
 
 
 # Stage 2 features (config.yaml stage2_features)
+# 2026-05-09 Phase 1 fix: UNRATE_change_180d ÇIKARILDI.
+# Sebep: Risk-Off cluster centroid'inde +1.69 dominant, sadece COVID 2020 yakalıyor;
+# 2008 GFC, 2002 dot-com, 2022 hike Neutral'a düşüyordu.
+# 8 feature kaldı — VIX/SP500/Gold/FFR/CPI/Yield Curve/M2 + DXY z-score.
 STAGE2_FEATURES = [
     "VIX_zscore_long",
     "SP500_log_return_5d",
@@ -37,7 +41,6 @@ STAGE2_FEATURES = [
     "Gold_log_return_20d",
     "FEDFUNDS_change_60d",
     "CPI_yoy_change",
-    "UNRATE_change_180d",
     "Yield_Curve_10Y_2Y",
     "M2_yoy_change",
 ]
