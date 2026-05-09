@@ -1,9 +1,124 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** V5 Phase 3 — Stage 1 Trend Classifier (Stage 2 finalized 2026-05-09)
-**Last Updated:** 2026-05-09 — Phase 2.12 Composite Macro FSM v5 onaylı, branch geçişi v5-from-scratch
-**Active Branch:** `v5-from-scratch` (claude/review-checkpoint-results-2hh1j merge edildikten sonra)
+**Active Phase:** V5 Phase 3 — Stage 1 Trend Classifier (HP-TUNED, ready for Phase 4)
+**Last Updated:** 2026-05-09 (akşam) — Phase 3 Stage 1 Optuna 5-fold inner CV tuning tamamlandı, 8/8 decision gate PASS, **RF her iki asset'te best**
+**Active Branch:** `v5-from-scratch`
+
+## V5 Phase 3 — Stage 1 Trend Classifier (HP-TUNED, FINAL)
+
+### Pipeline Özeti
+
+| Bileşen | Karar |
+|---|---|
+| Trend label | ZigZag offline + revisable, deviation_pct=0.10, min_segment_days=15, range_amplitude=0.075 (config D) |
+| Features | 14 teknik (returns 3, trend strength 3, momentum 2, mean-rev 2, volatility 2, volume 2) |
+| Outer CV | Walk-forward expanding-window, train_min=750, val=200, step=200, gap=10 → BTC 16 fold, ETH 10 fold |
+| Class weighting | `balanced` (LGBM/RF: sklearn class_weight; XGB: inverse-freq sample_weight; MLP: sklearn limit, raw) |
+| HP Tuning | Optuna TPE + MedianPruner, 30 trial × 4 model × 2 asset, **5-fold inner WF-CV objective** |
+| Inner CV | `train_min=750, val=300, gap=10`, evenly-spaced 5 fold across full dataset |
+
+### Final Results (Outer 16/10-fold OOF, 5-fold tuned HP)
+
+| Asset | Model | F1m | Acc | F1 down | F1 range | F1 up |
+|---|---|---:|---:|---:|---:|---:|
+| BTC | xgboost | 0.533 | 0.567 | 0.527 | 0.424 | 0.649 |
+| BTC | lightgbm | 0.526 | 0.569 | 0.499 | 0.413 | 0.666 |
+| BTC | **random_forest** | **0.563** | 0.593 | 0.549 | **0.473** | 0.667 |
+| BTC | mlp | 0.505 | 0.565 | 0.464 | 0.382 | 0.671 |
+| ETH | xgboost | 0.538 | 0.557 | 0.500 | 0.483 | 0.630 |
+| ETH | lightgbm | 0.538 | 0.557 | 0.503 | 0.476 | 0.634 |
+| ETH | **random_forest** | **0.571** | 0.588 | 0.551 | **0.519** | 0.643 |
+| ETH | mlp | 0.549 | 0.582 | 0.502 | 0.497 | 0.649 |
+
+**Decision gate F1m ≥ 0.50: 8/8 PASS** (önceki baseline 6/8, 3-fold tuned 7/8 idi).
+
+### Tuning Trajectory: Baseline → 3-fold tuned → 5-fold tuned
+
+#### F1 macro (8 model)
+
+| Asset/Model | Baseline | 3-fold tuned | 5-fold tuned | Δ vs base | Δ vs 3-fold |
+|---|---:|---:|---:|---:|---:|
+| BTC xgb  | 0.512 | 0.549 | 0.533 | +0.021 | -0.016 |
+| BTC lgbm | 0.507 | 0.526 | 0.526 | +0.019 | 0.000 |
+| BTC rf   | 0.557 | 0.543 ⚠ | **0.563** | +0.006 | **+0.020** |
+| BTC mlp  | 0.462 | 0.537 | 0.505 | +0.044 | -0.032 |
+| ETH xgb  | 0.510 | 0.526 | 0.538 | +0.028 | +0.012 |
+| ETH lgbm | 0.513 | 0.538 | 0.538 | +0.025 | 0.000 |
+| ETH rf   | 0.560 | 0.549 ⚠ | **0.571** | +0.012 | **+0.022** |
+| ETH mlp  | 0.475 | 0.471 ⚠ | **0.549** | +0.074 | **+0.078** |
+
+#### Range F1 (en imbalanced class)
+
+| Asset/Model | Baseline | 3-fold tuned | 5-fold tuned |
+|---|---:|---:|---:|
+| BTC rf  | 0.436 | 0.397 ⚠ | **0.473** ✓ |
+| ETH mlp | 0.411 | 0.410 | **0.497** ✓✓ |
+| ETH rf  | 0.514 | 0.498 ⚠ | **0.519** ✓ |
+
+### Methodology Findings (paper'a girer)
+
+**1. Inner CV fold count interacts with model regularization.**
+3-fold inner CV ile RF her iki asset'te baseline'dan **kötüleşti** (BTC -0.014, ETH -0.011). Sebep: Optuna 3 spesifik tarihsel pencerede (2017 bull / 2021 peak-flip / 2025 modern) iyi çıkan aşırı agresif HP'yi seçti — `min_samples_leaf=1`, `max_depth=8`. Bu HP set outer 16 fold'un farklı tarihsel rejimlerinde generalize etmedi → meta-overfitting.
+
+5-fold inner CV (2017/2019/2021/2023/2025 — her ~2 yılda bir) ile aynı RF için Optuna `min_samples_leaf=11` (BTC) ve `=5` (ETH) seçti — daha conservative, baseline'a yaklaştı, **outer'da iyileşti**.
+
+XGB/LGBM/MLP için 3-fold da yeterli oldu çünkü bu modellerin built-in regularization mekanizması (`min_child_weight`, `min_data_in_leaf`, `early_stopping`) zaten overfit'i frenliyor.
+
+**Akademik mesaj:** Models without built-in regularization (RF) require **richer historical coverage in inner CV** to avoid HP overfitting; models with built-in regularization tolerate fewer folds.
+
+**2. ETH MLP outlier: tuning gerekli.**
+Baseline ETH MLP F1m 0.475 (decision gate'in altında). 3-fold tune marjinal değişim (-0.005). 5-fold tune **+0.074** sıçrama (0.549). `(64,)` tek-layer + `alpha=8.7e-3` + `lr=2.6e-4`. ETH gibi kısa dataset'lerde MLP HP tuning olmadan zayıf, tune ile competitive.
+
+**3. Range class hâlâ en zayıf class.**
+En iyi range F1: BTC RF 0.473, ETH RF 0.519. Uptrend class ortalama F1 0.65+ (kolay), range 0.45-0.50 (zor). ZigZag ile range = "pre-pivot consolidation" doğası gereği belirsiz (label boundary yumuşak). Bu Stage 3 soft fusion için kritik: range posterior probability düşük olabilir, calibration ileride önemli olacak.
+
+**4. Best per-asset model: Random Forest** (her iki asset'te de hem F1m hem range F1 lider).
+
+### Reference Files
+
+- `src/labels/v5_trend_labels.py:zigzag_trend_label` — ZigZag offline label
+- `src/features/v5_trend_features.py:STAGE1_FEATURE_COLS` — 14 feature
+- `src/models/v5_stage1_trainer.py` — walk-forward CV, 4 model factory (`**hp_overrides` accept)
+- `src/models/v5_stage1_optuna.py` — Optuna search spaces + inner WF-CV objective + MedianPruner
+- `scripts/v5_build_stage1_dataset.py` — dataset builder (config D)
+- `scripts/v5_zigzag_param_sweep.py` — ZigZag param distribution sweep
+- `scripts/v5_train_stage1.py` — baseline (fixed HP) trainer
+- `scripts/v5_tune_stage1.py` — Optuna tuning runner (SQLite storage for dashboard)
+- `scripts/v5_train_stage1_tuned.py` — tuned outer retrain + delta CSV
+- `scripts/v5_plot_phase3_stage1_results.py --variant {base,tuned}`
+- `scripts/v5_plot_phase3_truth_vs_pred.py --variant {base,tuned}`
+- `scripts/v5_plot_phase3_tuning_compare.py` — baseline vs 3-fold vs 5-fold ablation plot
+
+### Reference Artifacts
+
+- `data/processed/{btc,eth}_features_stage1_v5_zz.csv` (15 col + label, ~4034 / 2895 row)
+- `data/processed/{btc,eth}_stage1_oof_{xgboost,lightgbm,random_forest,mlp}_v5.csv` — baseline OOF
+- `data/processed/{btc,eth}_stage1_oof_*_v5_tuned.csv` — 5-fold tuned OOF (Stage 3 input)
+- `data/processed/{btc,eth}_stage1_oof_*_v5_tuned_3fold.csv` — 3-fold tuned OOF (archive, ablation reference)
+- `reports/Phase3/v5_p3_stage1_overall.csv` — baseline summary (untouched)
+- `reports/Phase3/v5_p3_stage1_metrics.csv` — baseline per-fold (untouched)
+- `reports/Phase3/v5_p3_stage1_{confusion_grid,f1_per_fold,oof_timeline_*,truth_vs_pred_*}.png` — baseline plots (untouched)
+- `reports/Phase3.5_after_tune/v5_p3_stage1_overall_tuned.csv` — 5-fold tuned summary
+- `reports/Phase3.5_after_tune/v5_p3_stage1_overall_tuned_3fold.csv` — 3-fold tuned summary (archive)
+- `reports/Phase3.5_after_tune/v5_p3_stage1_metrics_tuned.csv` — 5-fold tuned per-fold
+- `reports/Phase3.5_after_tune/v5_p3_stage1_optuna_studies.csv` — all 240 trial details (5-fold)
+- `reports/Phase3.5_after_tune/v5_p3_stage1_optuna_studies_3fold.csv` — 3-fold trials (archive)
+- `reports/Phase3.5_after_tune/v5_p3_stage1_optuna_best.csv` — 8 best params per (asset, model)
+- `reports/Phase3.5_after_tune/v5_p3_stage1_tuning_delta.csv` — pre vs post-tuning delta
+- `reports/Phase3.5_after_tune/v5_p3_stage1_confusion_grid_tuned.png`
+- `reports/Phase3.5_after_tune/v5_p3_stage1_f1_per_fold_tuned.png`
+- `reports/Phase3.5_after_tune/v5_p3_stage1_oof_timeline_{btc,eth}_tuned.png`
+- `reports/Phase3.5_after_tune/v5_p3_stage1_truth_vs_pred_{btc,eth}_tuned.png`
+- `reports/Phase3.5_after_tune/v5_p3_stage1_tuning_compare.png` — methodology ablation 4-panel
+
+### Stage 3 (Phase 4) için sonraki adım
+
+- Stage 3 input olarak per-asset best model OOF kullanılacak: **BTC=RF tuned, ETH=RF tuned** (`_v5_tuned.csv` dosyaları)
+- Optional: 4-model ensemble (mean of OOF probabilities) kalibre edilmiş soft fusion için değerlendirilebilir
+- Phase 4 öncesi opsiyonel: probability calibration analysis (isotonic / Platt) — Stage 3'e gidecek posterior'ların reliability diagram'ı
+
+---
 
 ## V5 Phase 2 — Stage 2 Macro Regime Classifier (FINAL)
 

@@ -61,65 +61,84 @@ def walk_forward_splits(n: int, cfg: WalkForwardConfig) -> Iterator[tuple[np.nda
 
 # ---------- Model factories ----------
 
-def make_xgboost(random_state: int = 42, balanced: bool = False):
+def make_xgboost(random_state: int = 42, balanced: bool = False, **hp):
     # XGBoost has no class_weight; we apply sample_weight at fit time.
-    return xgb.XGBClassifier(
-        objective="multi:softprob",
-        num_class=3,
+    defaults = dict(
         n_estimators=300,
         max_depth=4,
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
+        min_child_weight=1,
+    )
+    defaults.update(hp)
+    return xgb.XGBClassifier(
+        objective="multi:softprob",
+        num_class=3,
         random_state=random_state,
         n_jobs=-1,
         verbosity=0,
         tree_method="hist",
+        **defaults,
     )
 
 
-def make_lightgbm(random_state: int = 42, balanced: bool = False):
-    return lgb.LGBMClassifier(
-        objective="multiclass",
-        num_class=3,
+def make_lightgbm(random_state: int = 42, balanced: bool = False, **hp):
+    defaults = dict(
         n_estimators=300,
         num_leaves=31,
         learning_rate=0.05,
         feature_fraction=0.8,
         bagging_fraction=0.8,
         bagging_freq=5,
+        min_data_in_leaf=20,
+    )
+    defaults.update(hp)
+    return lgb.LGBMClassifier(
+        objective="multiclass",
+        num_class=3,
         random_state=random_state,
         n_jobs=-1,
         verbose=-1,
         class_weight="balanced" if balanced else None,
+        **defaults,
     )
 
 
-def make_random_forest(random_state: int = 42, balanced: bool = False):
-    return RandomForestClassifier(
+def make_random_forest(random_state: int = 42, balanced: bool = False, **hp):
+    defaults = dict(
         n_estimators=300,
         max_depth=12,
         min_samples_leaf=5,
+        min_samples_split=2,
+        max_features="sqrt",
+    )
+    defaults.update(hp)
+    return RandomForestClassifier(
         n_jobs=-1,
         random_state=random_state,
         class_weight="balanced" if balanced else None,
+        **defaults,
     )
 
 
-def make_mlp(random_state: int = 42, balanced: bool = False):
+def make_mlp(random_state: int = 42, balanced: bool = False, **hp):
     # sklearn MLPClassifier doesn't support class_weight; balanced flag is
     # noted but not applied. Limitation logged in paper.
-    return MLPClassifier(
+    defaults = dict(
         hidden_layer_sizes=(64, 32),
         activation="relu",
         solver="adam",
         learning_rate_init=1e-3,
+        alpha=1e-4,
+        batch_size="auto",
         max_iter=300,
         early_stopping=True,
         validation_fraction=0.15,
         n_iter_no_change=20,
-        random_state=random_state,
     )
+    defaults.update(hp)
+    return MLPClassifier(random_state=random_state, **defaults)
 
 
 MODEL_FACTORIES: dict[str, Callable] = {
@@ -162,7 +181,8 @@ def _balanced_sample_weight(y_idx: np.ndarray) -> np.ndarray:
 def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
                        cfg: WalkForwardConfig | None = None,
                        random_state: int = 42,
-                       balanced: bool = False) -> tuple[pd.DataFrame, list[FoldResult]]:
+                       balanced: bool = False,
+                       hp: dict | None = None) -> tuple[pd.DataFrame, list[FoldResult]]:
     """Walk-forward CV training. Returns OOF predictions DataFrame + per-fold results.
 
     Parameters
@@ -172,11 +192,14 @@ def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
           - LightGBM, RandomForest: class_weight="balanced" via sklearn API
           - XGBoost: inverse-frequency sample_weight at fit time
           - MLP: not supported by sklearn (ignored, paper limitation)
+    hp : dict, optional
+        Hyperparameter overrides forwarded to the model factory. None -> defaults.
 
     OOF DataFrame columns: ['P_downtrend', 'P_range', 'P_uptrend', 'pred_label', 'true_label', 'fold']
     indexed by date; rows present only for val periods of any fold.
     """
     cfg = cfg or WalkForwardConfig()
+    hp = hp or {}
 
     if model_name not in MODEL_FACTORIES:
         raise ValueError(f"Unknown model: {model_name}")
@@ -193,7 +216,7 @@ def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
         X_val, y_val = X_arr[val_idx], y_idx[val_idx]
 
         if model_name in TREE_MODELS:
-            model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced)
+            model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced, **hp)
             if model_name == "xgboost" and balanced:
                 sw = _balanced_sample_weight(y_tr)
                 model.fit(X_tr, y_tr, sample_weight=sw)
@@ -204,7 +227,7 @@ def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
             scaler = StandardScaler().fit(X_tr)
             X_tr_s = scaler.transform(X_tr)
             X_val_s = scaler.transform(X_val)
-            model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced)
+            model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced, **hp)
             model.fit(X_tr_s, y_tr)
             proba = model.predict_proba(X_val_s)
 

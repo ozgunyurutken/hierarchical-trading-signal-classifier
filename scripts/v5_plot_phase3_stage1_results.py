@@ -1,13 +1,24 @@
 """V5 Phase 3 — Stage 1 training results plots.
 
-Outputs:
-  reports/Phase3/v5_p3_stage1_confusion_grid.png    — 4 models x 2 assets confusion
-  reports/Phase3/v5_p3_stage1_f1_per_fold.png        — F1 macro per fold per model
-  reports/Phase3/v5_p3_stage1_oof_timeline_btc.png   — OOF probability timeline BTC (best model)
-  reports/Phase3/v5_p3_stage1_oof_timeline_eth.png   — OOF probability timeline ETH (best model)
+Outputs (variant=base, default):
+  reports/Phase3/v5_p3_stage1_confusion_grid.png
+  reports/Phase3/v5_p3_stage1_f1_per_fold.png
+  reports/Phase3/v5_p3_stage1_oof_timeline_btc.png
+  reports/Phase3/v5_p3_stage1_oof_timeline_eth.png
+
+Outputs (variant=tuned):
+  reports/Phase3/v5_p3_stage1_confusion_grid_tuned.png
+  reports/Phase3/v5_p3_stage1_f1_per_fold_tuned.png
+  reports/Phase3/v5_p3_stage1_oof_timeline_btc_tuned.png
+  reports/Phase3/v5_p3_stage1_oof_timeline_eth_tuned.png
+
+Usage:
+  python scripts/v5_plot_phase3_stage1_results.py            # baseline
+  python scripts/v5_plot_phase3_stage1_results.py --variant tuned
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -27,14 +38,24 @@ MODELS = ["xgboost", "lightgbm", "random_forest", "mlp"]
 LABEL_COLORS = {"uptrend": "#7ec27e", "downtrend": "#e07e7e", "range": "#f0c870"}
 
 
-def plot_confusion_grid(out_dir: Path):
+def _suffix_for(variant: str) -> tuple[str, str]:
+    """Return (oof_suffix, plot_suffix). variant=base -> ('', ''), tuned -> ('_tuned','_tuned')."""
+    if variant == "base":
+        return "", ""
+    if variant == "tuned":
+        return "_tuned", "_tuned"
+    raise ValueError(f"Unknown variant: {variant}")
+
+
+def plot_confusion_grid(out_dir: Path, variant: str):
     proc = PROJECT_ROOT / "data" / "processed"
+    oof_suffix, plot_suffix = _suffix_for(variant)
     fig, axes = plt.subplots(2, 4, figsize=(18, 8))
     plt.rcParams.update({"figure.dpi": 240, "savefig.dpi": 240})
 
     for r, asset in enumerate(ASSETS):
         for c, model in enumerate(MODELS):
-            oof = pd.read_csv(proc / f"{asset}_stage1_oof_{model}_v5.csv",
+            oof = pd.read_csv(proc / f"{asset}_stage1_oof_{model}_v5{oof_suffix}.csv",
                               index_col=0, parse_dates=True)
             y_true = oof["true_label"].map(LABEL_TO_IDX).to_numpy()
             y_pred = oof["pred_label"].map(LABEL_TO_IDX).to_numpy()
@@ -55,18 +76,21 @@ def plot_confusion_grid(out_dir: Path):
             if c == 0: ax.set_ylabel(f"{asset.upper()}\ntrue", fontsize=10, fontweight="bold")
             ax.set_title(model, fontsize=11, fontweight="bold")
 
-    fig.suptitle("Phase 3 — Stage 1 confusion matrices (row-normalized)\n"
+    title_tag = " — TUNED" if variant == "tuned" else ""
+    fig.suptitle(f"Phase 3 — Stage 1 confusion matrices (row-normalized){title_tag}\n"
                  "4 classifiers x 2 assets, walk-forward OOF predictions",
                  fontsize=14, fontweight="bold", y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
-    out = out_dir / "v5_p3_stage1_confusion_grid.png"
+    out = out_dir / f"v5_p3_stage1_confusion_grid{plot_suffix}.png"
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {out.relative_to(PROJECT_ROOT)}")
 
 
-def plot_f1_per_fold(out_dir: Path):
-    metrics = pd.read_csv(out_dir / "v5_p3_stage1_metrics.csv", parse_dates=["val_start", "val_end"])
+def plot_f1_per_fold(out_dir: Path, variant: str):
+    _, plot_suffix = _suffix_for(variant)
+    metrics_name = "v5_p3_stage1_metrics_tuned.csv" if variant == "tuned" else "v5_p3_stage1_metrics.csv"
+    metrics = pd.read_csv(out_dir / metrics_name, parse_dates=["val_start", "val_end"])
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 5), sharey=True)
     plt.rcParams.update({"figure.dpi": 240, "savefig.dpi": 240})
@@ -87,19 +111,22 @@ def plot_f1_per_fold(out_dir: Path):
         ax.legend(fontsize=9, loc="lower right")
         ax.grid(True, alpha=0.3)
 
-    fig.suptitle("Phase 3 — Stage 1 walk-forward F1 macro stability",
+    title_tag = " — TUNED" if variant == "tuned" else ""
+    fig.suptitle(f"Phase 3 — Stage 1 walk-forward F1 macro stability{title_tag}",
                  fontsize=14, fontweight="bold", y=1.02)
     fig.tight_layout()
-    out = out_dir / "v5_p3_stage1_f1_per_fold.png"
+    out = out_dir / f"v5_p3_stage1_f1_per_fold{plot_suffix}.png"
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {out.relative_to(PROJECT_ROOT)}")
 
 
-def plot_oof_timeline(out_dir: Path, asset: str, color_close: str, best_model: str):
+def plot_oof_timeline(out_dir: Path, asset: str, color_close: str,
+                      best_model: str, variant: str):
     proc = PROJECT_ROOT / "data" / "processed"
+    oof_suffix, plot_suffix = _suffix_for(variant)
     df = pd.read_csv(proc / f"{asset}_aligned_v5.csv", index_col=0, parse_dates=True)
-    oof = pd.read_csv(proc / f"{asset}_stage1_oof_{best_model}_v5.csv",
+    oof = pd.read_csv(proc / f"{asset}_stage1_oof_{best_model}_v5{oof_suffix}.csv",
                       index_col=0, parse_dates=True)
 
     fig, axes = plt.subplots(2, 1, figsize=(15, 8), sharex=True,
@@ -133,30 +160,44 @@ def plot_oof_timeline(out_dir: Path, asset: str, color_close: str, best_model: s
     axes[1].legend(loc="upper left", fontsize=9, ncol=3)
     axes[1].grid(True, alpha=0.3)
 
-    fig.suptitle(f"Phase 3 — Stage 1 OOF timeline ({asset.upper()}, best model: {best_model})",
+    title_tag = " — TUNED" if variant == "tuned" else ""
+    fig.suptitle(f"Phase 3 — Stage 1 OOF timeline ({asset.upper()}, best model: {best_model}){title_tag}",
                  fontsize=13, fontweight="bold", y=0.995)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
-    out = out_dir / f"v5_p3_stage1_oof_timeline_{asset}.png"
+    out = out_dir / f"v5_p3_stage1_oof_timeline_{asset}{plot_suffix}.png"
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {out.relative_to(PROJECT_ROOT)}")
 
 
 def main():
-    out_dir = PROJECT_ROOT / "reports" / "Phase3"
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--variant", choices=["base", "tuned"], default="base",
+                    help="Which OOF/metrics to plot. 'base' uses *_v5.csv, "
+                         "'tuned' uses *_v5_tuned.csv. Default base.")
+    args = ap.parse_args()
+
+    # variant=base outputs to reports/Phase3, variant=tuned outputs to reports/Phase3.5_after_tune
+    out_dir = PROJECT_ROOT / "reports" / (
+        "Phase3.5_after_tune" if args.variant == "tuned" else "Phase3"
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    plot_confusion_grid(out_dir)
-    plot_f1_per_fold(out_dir)
+    # metrics CSV co-located with the plots, but for tuned variant the f1_per_fold
+    # plotter loads from out_dir; for base it loads from Phase3.
+    plot_confusion_grid(out_dir, args.variant)
+    plot_f1_per_fold(out_dir, args.variant)
 
-    overall = pd.read_csv(out_dir / "v5_p3_stage1_overall.csv")
+    overall_name = ("v5_p3_stage1_overall_tuned.csv" if args.variant == "tuned"
+                    else "v5_p3_stage1_overall.csv")
+    overall = pd.read_csv(out_dir / overall_name)
     btc_best = overall[overall["asset"] == "btc"].sort_values("f1_macro").iloc[-1]["model"]
     eth_best = overall[overall["asset"] == "eth"].sort_values("f1_macro").iloc[-1]["model"]
-    print(f"BTC best by F1 macro: {btc_best}")
-    print(f"ETH best by F1 macro: {eth_best}")
+    print(f"[{args.variant}] BTC best by F1 macro: {btc_best}")
+    print(f"[{args.variant}] ETH best by F1 macro: {eth_best}")
 
-    plot_oof_timeline(out_dir, "btc", "#F7931A", btc_best)
-    plot_oof_timeline(out_dir, "eth", "#627EEA", eth_best)
+    plot_oof_timeline(out_dir, "btc", "#F7931A", btc_best, args.variant)
+    plot_oof_timeline(out_dir, "eth", "#627EEA", eth_best, args.variant)
 
 
 if __name__ == "__main__":

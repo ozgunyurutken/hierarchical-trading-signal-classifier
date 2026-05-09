@@ -1,10 +1,14 @@
 """V5 Phase 3 — Stage 1 ground truth vs predicted timeline.
 
-Output:
+Output (variant=base, default):
   reports/Phase3/v5_p3_stage1_truth_vs_pred_btc.png
   reports/Phase3/v5_p3_stage1_truth_vs_pred_eth.png
 
-Per asset, 4-panel layout (best model: Random Forest):
+Output (variant=tuned):
+  reports/Phase3/v5_p3_stage1_truth_vs_pred_btc_tuned.png
+  reports/Phase3/v5_p3_stage1_truth_vs_pred_eth_tuned.png
+
+Per asset, 4-panel layout (best model selected from overall CSV):
   1. Price + ZigZag GROUND TRUTH label shading
   2. Price + PREDICTED label shading (argmax of OOF probabilities)
   3. AGREEMENT/ERROR mask (green agreement, red mismatch)
@@ -12,6 +16,7 @@ Per asset, 4-panel layout (best model: Random Forest):
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -56,10 +61,13 @@ def shade_correctness(ax, agreement_series):
     ax.axvspan(start, s.index[-1], color=color, alpha=0.50, lw=0)
 
 
-def plot_truth_vs_pred(asset: str, model: str, color_close: str, out_path: Path):
+def plot_truth_vs_pred(asset: str, model: str, color_close: str,
+                       out_path: Path, variant: str = "base"):
     proc = PROJECT_ROOT / "data" / "processed"
+    oof_suffix = "_tuned" if variant == "tuned" else ""
     df = pd.read_csv(proc / f"{asset}_aligned_v5.csv", index_col=0, parse_dates=True)
-    oof = pd.read_csv(proc / f"{asset}_stage1_oof_{model}_v5.csv", index_col=0, parse_dates=True)
+    oof = pd.read_csv(proc / f"{asset}_stage1_oof_{model}_v5{oof_suffix}.csv",
+                      index_col=0, parse_dates=True)
 
     close = df["Close"].reindex(oof.index)
     truth = oof["true_label"]
@@ -122,7 +130,8 @@ def plot_truth_vs_pred(asset: str, model: str, color_close: str, out_path: Path)
 
     breakdown_text = "  |  ".join([f"{cls} acc {acc:.2%} ({nc}/{nt})"
                                     for cls, nt, nc, acc in breakdown])
-    fig.suptitle(f"Phase 3 — Stage 1 truth vs predicted ({asset.upper()}, {model})\n"
+    title_tag = " — TUNED" if variant == "tuned" else ""
+    fig.suptitle(f"Phase 3 — Stage 1 truth vs predicted ({asset.upper()}, {model}){title_tag}\n"
                  f"OOF span: {oof.index.min().date()} → {oof.index.max().date()}, "
                  f"n={n_total}\nPer-class: {breakdown_text}",
                  fontsize=12, fontweight="bold", y=0.997)
@@ -133,17 +142,28 @@ def plot_truth_vs_pred(asset: str, model: str, color_close: str, out_path: Path)
 
 
 def main():
-    out_dir = PROJECT_ROOT / "reports" / "Phase3"
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--variant", choices=["base", "tuned"], default="base")
+    args = ap.parse_args()
+
+    out_dir = PROJECT_ROOT / "reports" / (
+        "Phase3.5_after_tune" if args.variant == "tuned" else "Phase3"
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    overall = pd.read_csv(out_dir / "v5_p3_stage1_overall.csv")
+    overall_name = ("v5_p3_stage1_overall_tuned.csv" if args.variant == "tuned"
+                    else "v5_p3_stage1_overall.csv")
+    overall = pd.read_csv(out_dir / overall_name)
     btc_best = overall[overall["asset"] == "btc"].sort_values("f1_macro").iloc[-1]["model"]
     eth_best = overall[overall["asset"] == "eth"].sort_values("f1_macro").iloc[-1]["model"]
+    plot_suffix = "_tuned" if args.variant == "tuned" else ""
 
     plot_truth_vs_pred("btc", btc_best, "#F7931A",
-                       out_dir / f"v5_p3_stage1_truth_vs_pred_btc.png")
+                       out_dir / f"v5_p3_stage1_truth_vs_pred_btc{plot_suffix}.png",
+                       args.variant)
     plot_truth_vs_pred("eth", eth_best, "#627EEA",
-                       out_dir / f"v5_p3_stage1_truth_vs_pred_eth.png")
+                       out_dir / f"v5_p3_stage1_truth_vs_pred_eth{plot_suffix}.png",
+                       args.variant)
 
 
 if __name__ == "__main__":

@@ -47,3 +47,7 @@ Thumbs.db
 
 # Docker
 docker/.env
+
+# Optuna study storage (generated, regenerable from scripts/v5_tune_stage1.py)
+optuna_v5.db
+optuna_v5.db-journal
