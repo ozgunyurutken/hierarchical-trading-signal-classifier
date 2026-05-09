@@ -182,10 +182,11 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
     ]
 
     for ax, series, title, color in panels:
+        s = series.dropna()  # FRED monthly + WM2NS weekly farklı tarihler, NaN'leri at
         if title.startswith("VIX") or title.startswith("M2"):
-            ax.semilogy(series.index, series.values, lw=0.7, color=color)
+            ax.semilogy(s.index, s.values, lw=0.9, color=color)
         else:
-            ax.plot(series.index, series.values, lw=0.7, color=color)
+            ax.plot(s.index, s.values, lw=0.9, color=color)
 
         # Crypto-era shading (V5+ training start)
         ax.axvspan(crypto_dt, series.index.max(), color="#ffe5b4", alpha=0.4)
@@ -235,9 +236,11 @@ def plot_macro_pretrain(out: Path, crypto_start: str = "2014-09-17"):
 
 
 def plot_correlation(btc, out: Path):
-    """Correlation heatmap of all 15 columns on BTC."""
+    """Correlation heatmap of FEATURE columns on BTC.
+    Open/High/Low excluded (~1.0 with Close, redundant)."""
+    feature_cols = [c for c in btc.columns if c not in ("Open", "High", "Low")]
     fig, ax = plt.subplots(figsize=(11, 9))
-    corr = btc.corr()
+    corr = btc[feature_cols].corr()
     im = ax.imshow(corr, cmap="RdBu_r", vmin=-1, vmax=1)
     ax.set_xticks(range(len(corr))); ax.set_yticks(range(len(corr)))
     ax.set_xticklabels(corr.columns, rotation=45, ha="right", fontsize=9)
@@ -248,7 +251,8 @@ def plot_correlation(btc, out: Path):
                     fontsize=7.5, color="white" if abs(corr.iloc[i, j]) > 0.5 else "black")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     ax.set_title(f"BTC V5 Feature Correlation Matrix (Pearson)\n"
-                 f"{len(corr)} columns: 5 OHLCV + {len(corr) - 5} macro (incl. M2/WM2NS)",
+                 f"{len(corr)} feature columns: Close + Volume + {len(corr) - 2} macro "
+                 f"(Open/High/Low excluded — ~1.0 with Close, redundant)",
                  fontsize=11, fontweight="bold")
     ax.grid(False)
     fig.tight_layout()
