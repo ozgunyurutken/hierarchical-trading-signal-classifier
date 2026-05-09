@@ -9,19 +9,16 @@
 
 ### Approach Evolution (kısa özet, paper-friendly)
 
-Phase 2.1-2.6'da denenen unsupervised yaklaşımlar yetersiz kaldı:
+Dört kanonik unsupervised yaklaşımı birer kez denedik; hepsi yetersiz kaldı:
 
-| Phase | Yöntem | Sonuç |
-|---|---|---|
-| 2.1 | Constrained K-Means | Non-temporal — 2008 GFC yapısını yakalayamadı |
-| 2.2 | Unsupervised K-Means | Cluster geçişleri tutarsız, kriz ayrımı net değil |
-| 2.3 | Sparse K-Means + feature selection | Aynı non-temporal limitasyon |
-| 2.4 | Minimal K-Means (top-2 feat) | Aşırı simplification, 3 sınıf ayrımı düşük |
-| 2.5 | HMM 3-state Gaussian | Temporal ama state geçişleri stabil değil |
-| 2.5b | GMM 3-component | Stickiness — 2024-2025'te P(Stress)≈0.96 sabit |
-| 2.6 | Single-rule VIX threshold | Hysteresis/dwell yok → noisy flip-flop |
+| Yöntem | Sonuç |
+|---|---|
+| Unsupervised K-Means | Non-temporal cluster atama — 2008 GFC yapısını yakalayamadı |
+| Semantic Constrained K-Means | Sınıf semantiği zorlandı ama geçiş kararları noisy |
+| HMM 3-state Gaussian | Temporal ama state geçişleri stabil değil |
+| GMM 3-component | 2024-2025 stickiness — P(Stress) ≈ 0.96 sabit kaldı |
 
-**Pivot:** Phase 2.7'den itibaren makro veriyi (VIX, S&P 500, yield curve, DXY, M2) kullanan **rule-based composite finite-state machine** yaklaşımına geçildi. 2.7'den 2.12'ye iteratif iyileştirme: hysteresis → dwell → velocity overrides → macro stress overrides → V-shape recovery → rapid escalation → noise reduction.
+**Pivot:** Bu 4 unsupervised denemeden sonra makro veriyi (VIX, S&P 500, yield curve, DXY, M2) kullanan **rule-based composite finite-state machine** yaklaşımına hızlıca geçildi. FSM iteratif olarak Phase 2.12'de finalize edildi (hysteresis + dwell + velocity overrides + macro stress overrides + V-shape recovery + rapid escalation + noise reduction).
 
 ### Phase 2.12 Final Rule Set
 
@@ -74,8 +71,11 @@ Phase 2.1-2.6'da denenen unsupervised yaklaşımlar yetersiz kaldı:
 - `src/labels/v5_regime_labels.py:CompositeVIXRegimeClassifier` (final implementation)
 - `scripts/v5_build_regime_labels_composite_macro_v5.py` (Phase 2.12 build)
 - `data/processed/{btc,eth,macro_pretrain}_regime_labels_composite_macro_v5_v5.csv`
-- `reports/Phase2/v5_phase2.12_noise_reduction_timeline_4panel.png` (final timeline)
-- `reports/Phase2/v5_phase2.2_unsupervised_kmeans_timeline_4panel.png` (clustering baseline ref)
+- `reports/Phase2/v5_phase2.1_constrained_kmeans_timeline_4panel.png` (semantic constrained KM baseline)
+- `reports/Phase2/v5_phase2.2_unsupervised_kmeans_timeline_4panel.png` (vanilla K-Means baseline)
+- `reports/Phase2/v5_phase2.5_hmm_timeline_4panel.png` (HMM baseline)
+- `reports/Phase2/v5_phase2.5b_gmm_timeline_4panel.png` (GMM baseline)
+- `reports/Phase2/v5_phase2.12_noise_reduction_timeline_4panel.png` (final Composite Macro FSM)
 - `notebooks/06_stage2_training.ipynb` (reproducibility notebook)
 
 ---

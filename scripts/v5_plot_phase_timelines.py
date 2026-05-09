@@ -34,46 +34,25 @@ REGIME_COLORS = {
 }
 
 # Each entry: (phase_id, csv_suffix, title)
+# Paper scope: tek-deneme baselines (K-Means / Constrained K-Means / HMM / GMM)
+# + final Composite Macro FSM. Diğer iterasyonlar (Phase 2.3-2.4, 2.6-2.11)
+# git history'de kalır; paper'a girmez.
 PHASES = [
     ("v5_phase2.1_constrained_kmeans",
      "constrained_v5",
-     "V5 Phase 2.1 — Constrained K-Means (4 macro features)"),
+     "V5 Phase 2.1 — Semantic Constrained K-Means (4 macro features)"),
     ("v5_phase2.2_unsupervised_kmeans",
      "unsupervised_v5",
      "V5 Phase 2.2 — Unsupervised K-Means (10 macro features)"),
-    ("v5_phase2.3_sparse_kmeans",
-     "sparse_v5",
-     "V5 Phase 2.3 — Sparse K-Means (feature selection)"),
-    ("v5_phase2.4_minimal_kmeans",
-     "minimal_kmeans_v5",
-     "V5 Phase 2.4 — Minimal K-Means (top-2 features)"),
     ("v5_phase2.5_hmm",
      "hmm_v5",
      "V5 Phase 2.5 — Hidden Markov Model (3 states, Gaussian emissions)"),
     ("v5_phase2.5b_gmm",
      "gmm_v5",
      "V5 Phase 2.5b — GMM (3 components, soft assignment)"),
-    ("v5_phase2.6_rule_vix",
-     "rule_vix_v5",
-     "V5 Phase 2.6 — Single-rule VIX threshold (baseline)"),
-    ("v5_phase2.7_composite_vix",
-     "composite_rule_v5",
-     "V5 Phase 2.7 — Composite VIX FSM (hysteresis + dwell + velocity)"),
-    ("v5_phase2.8_yc_override",
-     "composite_macro_v5",
-     "V5 Phase 2.8 — + Yield Curve persistent inversion override"),
-    ("v5_phase2.9_dxy_m2_stress",
-     "composite_macro_v2_v5",
-     "V5 Phase 2.9 — + DXY/M2 macro stress + YC yumuşatılmış"),
-    ("v5_phase2.10_bull_velocity",
-     "composite_macro_v3_v5",
-     "V5 Phase 2.10 — + Bull velocity entry (V-shape recovery)"),
-    ("v5_phase2.11_bear_velocity",
-     "composite_macro_v4_v5",
-     "V5 Phase 2.11 — + Bear velocity entry (rapid escalation)"),
     ("v5_phase2.12_noise_reduction",
      "composite_macro_v5_v5",
-     "V5 Phase 2.12 — + Neutral min dwell (noise reduction)"),
+     "V5 Phase 2.12 — Composite Macro FSM (final, 8 rules + 1 guard)"),
 ]
 
 
