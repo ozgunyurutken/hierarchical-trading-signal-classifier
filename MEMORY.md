@@ -1,13 +1,90 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** FAZ 7 — Rapor & Sunum (V3 restart literatür taraması safhası)
-**Last Updated:** 2026-05-08 (akşam — B2 ZZ-MLP 1.68 Sharpe; V3 plan onaylı; lit review başlıyor)
-**Days to deadline:** 2 (Final Report 10 Mayıs 2026)
-**Aktif Checkpoint:** `docs/CHECKPOINT_2026-05-08.md` — anlık tüm branch durumu
+**Active Phase:** V5 Phase 3 — Stage 1 Trend Classifier (Stage 2 finalized 2026-05-09)
+**Last Updated:** 2026-05-09 — Phase 2.12 Composite Macro FSM v5 onaylı, branch geçişi v5-from-scratch
+**Active Branch:** `v5-from-scratch` (claude/review-checkpoint-results-2hh1j merge edildikten sonra)
 
-**Referans noktaları:**
-- `v1.0-iter4-final` tag (`ab408d5`) — Sharpe 1.35 fallback
+## V5 Phase 2 — Stage 2 Macro Regime Classifier (FINAL)
+
+### Approach Evolution (kısa özet, paper-friendly)
+
+Phase 2.1-2.6'da denenen unsupervised yaklaşımlar yetersiz kaldı:
+
+| Phase | Yöntem | Sonuç |
+|---|---|---|
+| 2.1 | Constrained K-Means | Non-temporal — 2008 GFC yapısını yakalayamadı |
+| 2.2 | Unsupervised K-Means | Cluster geçişleri tutarsız, kriz ayrımı net değil |
+| 2.3 | Sparse K-Means + feature selection | Aynı non-temporal limitasyon |
+| 2.4 | Minimal K-Means (top-2 feat) | Aşırı simplification, 3 sınıf ayrımı düşük |
+| 2.5 | HMM 3-state Gaussian | Temporal ama state geçişleri stabil değil |
+| 2.5b | GMM 3-component | Stickiness — 2024-2025'te P(Stress)≈0.96 sabit |
+| 2.6 | Single-rule VIX threshold | Hysteresis/dwell yok → noisy flip-flop |
+
+**Pivot:** Phase 2.7'den itibaren makro veriyi (VIX, S&P 500, yield curve, DXY, M2) kullanan **rule-based composite finite-state machine** yaklaşımına geçildi. 2.7'den 2.12'ye iteratif iyileştirme: hysteresis → dwell → velocity overrides → macro stress overrides → V-shape recovery → rapid escalation → noise reduction.
+
+### Phase 2.12 Final Rule Set
+
+8 rule + 1 guard, üç katmanlı yapı:
+
+**Base FSM:**
+| # | Rule | Detail |
+|---|---|---|
+| 1 | Hysteresis | Bear entry VIX_z>1.0, exit <0.3 / Bull entry VIX_z<-0.5 AND SP500_5d>0, exit >0.0 |
+| 2 | Dwell time | Bear ≥20d, Bull ≥40d, Neutral ≥10d (threshold-based exits) |
+| 3 | Bear→Neutral velocity | ΔVIX_z[10d] < -0.8 (rapid Bear exit) |
+
+**Macro overrides (defensive bias):**
+| # | Rule | Detail |
+|---|---|---|
+| 4 | YC persistent inversion | 60d rolling(10Y-2Y) < 0 → Bull → Neutral force |
+| 5 | DXY + M2 macro stress | DXY_z[30d]>0.7 AND M2_yoy[30d]<0.040 → Bull → Neutral |
+
+**Velocity entries (dwell bypass, rapid response):**
+| # | Rule | Detail |
+|---|---|---|
+| 6 | Bull velocity entry | ΔVIX_z[30d] < -0.6 AND SP500_60d > +2% (V-shape) |
+| 7 | Bear velocity entry | ΔVIX_z[5d] > +0.6 AND SP500_5d < -1.5% (rapid escalation) |
+
+**Guard:**
+| # | Rule | Detail |
+|---|---|---|
+| 8 | Bear re-entry guard | Bear→Neutral sonrası 35d Neutral dwell şart Bear'a dönüş için |
+
+### Validation Results
+
+**Distribution (Bull/Neutral/Bear):**
+- Pre-train (2000-2025): 63.2% / 24.0% / 12.8%
+- BTC era (2014+):      68.7% / 20.5% / 10.8%
+- ETH era (2017+):      65.4% / 23.5% / 11.0%
+
+**Crises caught:**
+- 2008-09 GFC, 2018 Q4 Fed pivot, 2020-03 COVID, 2022 Q2-Q4 Bear cycle
+- 2025-04-03 Trump Liberation Day tariff (rapid Bear via velocity entry)
+- 2024-08-02 yen carry trade unwind, 2023-03-13 SVB collapse
+
+**Recoveries caught (V-shape):**
+- 2003 dot-com, 2009 GFC, 2020 May post-pandemic, 2022 Q4-2023 Q1, 2025 May post-tariff
+
+**Override fire frequency (Pre-train, 6258 days):**
+- Bear→Neutral velocity: 31× | Bull velocity entry: 31× | Bear velocity entry: 35×
+- YC override: 13× | Macro stress (DXY+M2): 2×
+
+### Reference Files
+- `src/labels/v5_regime_labels.py:CompositeVIXRegimeClassifier` (final implementation)
+- `scripts/v5_build_regime_labels_composite_macro_v5.py` (Phase 2.12 build)
+- `data/processed/{btc,eth,macro_pretrain}_regime_labels_composite_macro_v5_v5.csv`
+- `reports/Phase2/v5_phase2.12_noise_reduction_timeline_4panel.png` (final timeline)
+- `reports/Phase2/v5_phase2.2_unsupervised_kmeans_timeline_4panel.png` (clustering baseline ref)
+- `notebooks/06_stage2_training.ipynb` (reproducibility notebook)
+
+---
+
+## Önceki Iterasyon Notları (V1/V2 — fallback referansı, paper'a girmez)
+
+> CLAUDE.md report scope rule: paper sadece V5 final üzerinden yazılır. Aşağıdaki içerik fallback / iç dokümantasyon.
+
+
 - `v2/feature-selection` branch — Sharpe **1.68** (ZZ-MLP, B2 subset) primary headline
 - `v3-rule-based-regime` branch (`042fafd`) — WIP, lit review sonrası başlayacak
 
