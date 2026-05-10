@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ekip Brief — Hiyerarşik Kripto Sinyal Sınıflandırma</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2332;
+    --panel-2: #232f42;
+    --text: #e8edf3;
+    --text-dim: #a4b1c2;
+    --accent: #4fc3f7;
+    --accent-2: #81c784;
+    --warn: #ffb74d;
+    --danger: #e57373;
+    --border: #2a3a52;
+    --tip-bg: #0a0f15;
+    --role-1: #4fc3f7;
+    --role-2: #ba68c8;
+    --role-3: #81c784;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.hero {
+    background: linear-gradient(135deg, #1a2332 0%, #2c1a3f 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 48px 24px;
+    text-align: center;
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 2.0rem; font-weight: 700; letter-spacing: -0.02em; }
+  header.hero .subtitle { color: var(--text-dim); font-size: 1.05rem; max-width: 720px; margin: 0 auto; }
+
+  h2 { margin: 56px 0 16px; font-size: 1.55rem; border-bottom: 2px solid var(--border); padding-bottom: 8px; }
+  h2 .num { color: var(--accent); font-weight: 600; margin-right: 10px; }
+  h3 { margin: 32px 0 12px; font-size: 1.2rem; color: var(--accent); }
+  p { margin: 12px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 6px 0; }
+  code { background: var(--panel); color: var(--accent-2); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; font-family: "SF Mono", Menlo, Consolas, monospace; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.85em; }
+  pre code { background: transparent; padding: 0; color: var(--text); }
+  blockquote { border-left: 3px solid var(--accent); background: var(--panel); margin: 16px 0; padding: 12px 18px; color: var(--text-dim); border-radius: 0 8px 8px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; background: var(--panel); border-radius: 8px; overflow: hidden; font-size: 0.93em; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--panel-2); font-weight: 600; color: var(--accent); }
+  tr:last-child td { border-bottom: none; }
+
+  /* === FIGURE === */
+  figure { margin: 24px 0; padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 6px; background: #fff; }
+  figure.wide-fig { width: calc(100vw - 32px); max-width: 1400px; margin-left: 50%; transform: translateX(-50%); overflow-x: auto; }
+  figure.wide-fig img { min-width: 900px; width: 100%; background: #fff; }
+  figcaption { margin-top: 10px; font-size: 0.88em; color: var(--text-dim); font-style: italic; text-align: center; }
+  figcaption strong { color: var(--accent); font-style: normal; }
+
+  /* === ABBREVIATION INLINE FIRST USE === */
+  .first-use {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .first-use .expansion {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-style: italic;
+    font-size: 0.92em;
+  }
+
+  /* === ABBREVIATION TOOLTIP (subsequent uses) === */
+  .term {
+    display: inline-block;
+    border-bottom: 1px dashed var(--accent);
+    cursor: help;
+    position: relative;
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+    padding: 0 1px;
+  }
+  .term:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  .term::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--tip-bg);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.82em;
+    font-weight: 400;
+    line-height: 1.45;
+    white-space: normal;
+    width: max-content;
+    max-width: 320px;
+    text-align: left;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
+    z-index: 100;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    border: 1px solid var(--accent);
+  }
+  .term::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--accent);
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
+    z-index: 100;
+  }
+  .term:hover::after, .term:focus::after,
+  .term:hover::before, .term:focus::before,
+  .term.tapped::after, .term.tapped::before { opacity: 1; visibility: visible; }
+
+  /* === ROLE CARDS === */
+  .roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 24px 0; }
+  .role { background: var(--panel); border-radius: 12px; padding: 20px; border-top: 4px solid; }
+  .role.r1 { border-color: var(--role-1); }
+  .role.r2 { border-color: var(--role-2); }
+  .role.r3 { border-color: var(--role-3); }
+  .role h4 { margin: 0 0 8px; font-size: 1.05rem; }
+  .role .pct { display: inline-block; background: var(--panel-2); padding: 2px 10px; border-radius: 12px; font-size: 0.8em; color: var(--text-dim); margin-left: 8px; }
+  .role .label { font-size: 0.85em; color: var(--text-dim); margin-bottom: 12px; }
+  .role ul { margin: 8px 0; padding-left: 20px; font-size: 0.92em; }
+  .role .figs { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.8em; color: var(--text-dim); }
+
+  /* === LEGEND BAR === */
+  .legend-bar { position: sticky; top: 0; background: rgba(15, 20, 25, 0.96); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 10px 24px; z-index: 50; font-size: 0.85em; color: var(--text-dim); text-align: center; }
+  .legend-bar a { color: var(--accent); text-decoration: none; margin: 0 6px; }
+  .legend-bar a:hover { text-decoration: underline; }
+
+  /* === CALLOUT === */
+  .callout { background: var(--panel); border-left: 4px solid var(--warn); padding: 14px 18px; margin: 18px 0; border-radius: 0 8px 8px 0; }
+  .callout.danger { border-color: var(--danger); }
+  .callout.success { border-color: var(--accent-2); }
+  .callout strong { color: var(--warn); }
+  .callout.danger strong { color: var(--danger); }
+  .callout.success strong { color: var(--accent-2); }
+
+  /* === INLINE SVG / DIAGRAM === */
+  .pipeline-svg, .diagram-svg {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 24px 0;
+    border: 1px solid var(--border);
+  }
+  .pipeline-svg svg, .diagram-svg svg { width: 100%; height: auto; }
+  .diagram-svg .caption { margin-top: 10px; text-align: center; font-size: 0.88em; color: var(--text-dim); font-style: italic; }
+  .diagram-svg .caption strong { color: var(--accent); font-style: normal; }
+
+  /* === CLASS BALANCE BAR === */
+  .balance-bar {
+    display: flex;
+    height: 38px;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 14px 0;
+    border: 1px solid var(--border);
+    font-size: 0.85em;
+    font-weight: 700;
+    color: #fff;
+  }
+  .balance-bar > div {
+    display: flex; align-items: center; justify-content: center;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+
+  /* === FLOATING GLOSSARY BUTTON === */
+  #glossary-btn {
+    position: fixed;
+    bottom: 22px;
+    right: 22px;
+    background: var(--accent);
+    color: #0a0f15;
+    border: none;
+    padding: 12px 18px;
+    border-radius: 28px;
+    font-weight: 700;
+    font-size: 0.95em;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4), 0 0 0 3px rgba(79,195,247,0.2);
+    z-index: 200;
+    transition: transform 0.15s;
+  }
+  #glossary-btn:hover { transform: translateY(-2px); }
+  #glossary-panel {
+    position: fixed;
+    bottom: 80px;
+    right: 22px;
+    width: 360px;
+    max-width: calc(100vw - 44px);
+    max-height: 70vh;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    z-index: 199;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+  }
+  #glossary-panel.open { display: flex; }
+  #glossary-panel header {
+    padding: 12px 16px;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #glossary-panel header strong { color: var(--accent); font-size: 1em; }
+  #glossary-panel input {
+    width: calc(100% - 32px);
+    margin: 12px 16px 0;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.9em;
+  }
+  #glossary-list {
+    overflow-y: auto;
+    padding: 8px 0 12px;
+    flex: 1;
+  }
+  #glossary-list .row {
+    padding: 8px 16px;
+    font-size: 0.85em;
+    border-bottom: 1px solid var(--border);
+  }
+  #glossary-list .row:last-child { border: none; }
+  #glossary-list .row .key { color: var(--accent); font-weight: 700; display: block; margin-bottom: 2px; }
+  #glossary-list .row .val { color: var(--text-dim); line-height: 1.4; }
+  .close-x { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.4em; line-height: 1; padding: 0 4px; }
+
+  @media print {
+    #glossary-btn, #glossary-panel, .legend-bar { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Ekip Brief — Hiyerarşik Kripto Sinyal Sınıflandırma</h1>
+  <p class="subtitle">
+    "A Three-Stage Hierarchical Soft-Fusion Framework for Cryptocurrency Trading Signal Classification"
+    — yani <em><span class="first-use">Bitcoin (BTC)</span> ve <span class="first-use">Ethereum (ETH)</span>
+    için günlük üç-aşamalı hiyerarşik <strong>AL / SAT / BEKLE</strong> tahmin sistemi</em>.
+  </p>
+</header>
+
+<nav class="legend-bar">
+  Hızlı Geçiş —
+  <a href="#roller">Rol Dağılımı</a> ·
+  <a href="#niye">Problem</a> ·
+  <a href="#veri">Veri</a> ·
+  <a href="#stage1">Stage 1</a> ·
+  <a href="#stage2">Stage 2</a> ·
+  <a href="#stage3">Stage 3</a> ·
+  <a href="#cv">Walk-Forward</a> ·
+  <a href="#ablation">Ablation</a> ·
+  <a href="#trading">Trading</a> ·
+  <a href="#sistem">Sistem</a> ·
+  <a href="#faq">FAQ</a>
+  &nbsp;|&nbsp; <span style="color:var(--text-dim);font-size:0.85em;">Sağ alttaki 📖 ile sözlük her an açılır</span>
+</nav>
+
+<main class="container">
+
+<!-- ============================================================
+     0. ROL DAĞILIMI ÖNERİSİ
+============================================================ -->
+<section id="roller">
+  <h2><span class="num">0</span>Önerilen Rol Dağılımı (3 Kişi, İsimsiz)</h2>
+
+  <p>
+    Sunum yaklaşık 15 dakika (5 dk × 3 kişi) + canlı demo + soru-cevap. Aşağıdaki üç rol, projenin
+    teknik derinliğine ve doğal "sahibi olunması gereken" parçalarına göre bölünmüş.
+    Roller arası geçişler doğal olur çünkü her rol bir öncekinin çıktısı üzerine kurulur.
+  </p>
+
+  <div class="roles">
+
+    <div class="role r1">
+      <h4>Rol A — Veri &amp; Trend Sunan <span class="pct">~%30</span></h4>
+      <div class="label">Pipeline'ın "girdi tarafı": ham veriden ilk tahmine.</div>
+      <strong>Sahip olduğu bölümler</strong>
+      <ul>
+        <li>Section II.A — Dataset Description</li>
+        <li>Section II.D — ZigZag-Labelled Trend Classifier (Stage 1)</li>
+        <li>Section IV.A — Stage 1 Sonuçları</li>
+      </ul>
+      <strong>Konuşma odağı</strong>
+      <ul>
+        <li>BTC ve ETH için <span class="first-use">OHLCV <span class="expansion">(Open / High / Low / Close / Volume — günlük açılış-yüksek-düşük-kapanış-hacim)</span></span> + 22 makro değişken nasıl çekildi.</li>
+        <li><span class="first-use">Lookahead bias <span class="expansion">(modelin tahmin sırasında geleceği bilmesi durumu — sahte yüksek skor üretir)</span></span> nasıl önlendi.</li>
+        <li>ZigZag etiketleme + retrospektiflik kanıtı.</li>
+        <li>14 teknik özellik, 4 model, neden Random Forest kazandı.</li>
+      </ul>
+      <div class="figs">🎨 Görseller: <code>fig_eng_demo</code>, <code>fig_zigzag_lookahead</code>, <code>fig_stage1_confusion</code>, <code>fig_stage1_truth_vs_pred_btc</code></div>
+    </div>
+
+    <div class="role r2">
+      <h4>Rol B — Mimari &amp; Soft-Fusion Sunan <span class="pct">~%40</span></h4>
+      <div class="label">Pipeline'ın "kalbi": üç stage'in matematiksel bağı + Stage 2 + Stage 3.</div>
+      <strong>Sahip olduğu bölümler</strong>
+      <ul>
+        <li>Section II.B — Three-Stage Architecture (Eq. 1–4)</li>
+        <li>Section II.C — Stage 2 Composite Macro <span class="first-use">FSM <span class="expansion">(Finite State Machine — sonlu durumlar + aralarında deterministik geçiş kuralları olan sistem)</span></span></li>
+        <li>Section II.E — Classifiers (4 model varsayımları)</li>
+        <li>Section IV.B — Stage 3 Sonuçları</li>
+      </ul>
+      <strong>Konuşma odağı</strong>
+      <ul>
+        <li><span class="first-use">Soft fusion <span class="expansion">(hard label yerine olasılık vektörü kullanmak — belirsizlik bilgisi korunur)</span></span> mantığı.</li>
+        <li>Niye Stage 2 öğrenmez? Unsupervised denemelerin başarısızlık sebebi.</li>
+        <li>16 boyutlu Stage 3 özellik vektörü kırılımı.</li>
+        <li>4 model varsayımı karşılaştırması.</li>
+      </ul>
+      <div class="figs">🎨 Görseller: <code>fig_arch_diagram</code>, <code>fig_stage2_fsm</code>, <code>fig_stage3_roc_curves</code></div>
+    </div>
+
+    <div class="role r3">
+      <h4>Rol C — Deney, Ablation &amp; Demo Sunan <span class="pct">~%30 + demo</span></h4>
+      <div class="label">"Bunlar gerçekten işe yarıyor mu?" — Walk-forward + ablation + canlı sistem.</div>
+      <strong>Sahip olduğu bölümler</strong>
+      <ul>
+        <li>Section III — Experimental Setup (<span class="first-use">walk-forward CV <span class="expansion">(Cross-Validation — zaman-sıralı doğrulama; train hep test'ten önce)</span></span>, <span class="first-use">Optuna <span class="expansion">(Bayesian hyperparameter optimization kütüphanesi)</span></span>)</li>
+        <li>Section IV.C — Architecture Ablation <strong>(EN KRİTİK SLIDE)</strong></li>
+        <li>Section IV.D — Trading Rules</li>
+        <li>Section V — Discussion (asset-specific finding)</li>
+        <li>System Component — Docker + <span class="first-use">FastAPI <span class="expansion">(modern Python web framework, async + type-hint native)</span></span> canlı demo</li>
+      </ul>
+      <strong>Konuşma odağı</strong>
+      <ul>
+        <li>4 mimari × 4 model × 2 asset = neden bu kombinasyon.</li>
+        <li>BTC ⇄ ETH zıt sonuç → no-free-lunch yorumu.</li>
+        <li>Hold sınıfı = "risk filtresi" → düşük <span class="first-use">F1m <span class="expansion">(macro-averaged F1; sınıflar arası dengeli ortalama, 0–1)</span></span> ama yüksek <span class="first-use">Sharpe <span class="expansion">(Sharpe Ratio = risk-adjusted yıllık getiri; &gt;1 iyi)</span></span> nasıl olur.</li>
+        <li>Canlı demo: <code>docker-compose up</code> → BTC + 3-Stage + Stateful → Sharpe 1.15.</li>
+      </ul>
+      <div class="figs">🎨 Görseller: <code>fig_arch_heatmap</code>, <code>fig_arch_equity</code>, demo ekranı</div>
+    </div>
+
+  </div>
+
+  <div class="callout">
+    <strong>Geçişler doğal:</strong> Rol A "Stage 1 trend tahminini ürettik" der → Rol B
+    "şimdi bu posterior'u Stage 3'e nasıl beslediğimizi anlatayım" der → Rol C
+    "ve şimdi bu pipeline'ın farklı mimarilerle nasıl karşılaştığını ve canlı çalıştığını gösterelim" der.
+  </div>
+</section>
+
+<!-- ============================================================
+     PIPELINE OVERVIEW SVG
+============================================================ -->
+<section>
+  <h2><span class="num">⌘</span>Pipeline Tek Bakışta</h2>
+
+  <div class="pipeline-svg">
+    <svg viewBox="0 0 1100 360" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#4fc3f7"/>
+        </marker>
+        <linearGradient id="g1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#1e3a5f"/><stop offset="100%" stop-color="#2c5282"/></linearGradient>
+        <linearGradient id="g2" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#553c7b"/><stop offset="100%" stop-color="#6b46c1"/></linearGradient>
+        <linearGradient id="g3" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#2f5d3f"/><stop offset="100%" stop-color="#3d8b5a"/></linearGradient>
+      </defs>
+
+      <rect x="20" y="140" width="170" height="80" rx="10" fill="#1a2332" stroke="#4fc3f7" stroke-width="2"/>
+      <text x="105" y="170" text-anchor="middle" fill="#e8edf3" font-size="14" font-weight="700">Veri Girdisi</text>
+      <text x="105" y="190" text-anchor="middle" fill="#a4b1c2" font-size="11">BTC + ETH OHLCV</text>
+      <text x="105" y="207" text-anchor="middle" fill="#a4b1c2" font-size="11">22 makro değişken</text>
+
+      <rect x="240" y="40" width="200" height="100" rx="10" fill="url(#g1)" stroke="#4fc3f7" stroke-width="2"/>
+      <text x="340" y="68" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">Stage 1 — Trend</text>
+      <text x="340" y="90" text-anchor="middle" fill="#cbd5e0" font-size="11">ZigZag etiket + 14 teknik özellik</text>
+      <text x="340" y="107" text-anchor="middle" fill="#cbd5e0" font-size="11">XGB / LGBM / RF / MLP</text>
+      <text x="340" y="127" text-anchor="middle" fill="#81c784" font-size="11" font-weight="600">çıktı: P(Down/Range/Up)</text>
+
+      <rect x="240" y="220" width="200" height="100" rx="10" fill="url(#g2)" stroke="#ba68c8" stroke-width="2"/>
+      <text x="340" y="248" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">Stage 2 — Macro FSM</text>
+      <text x="340" y="270" text-anchor="middle" fill="#e9d8fd" font-size="11">8 kural + 1 guard (kuralcı)</text>
+      <text x="340" y="287" text-anchor="middle" fill="#e9d8fd" font-size="11">VIX / DXY / yield curve / M2</text>
+      <text x="340" y="307" text-anchor="middle" fill="#81c784" font-size="11" font-weight="600">çıktı: Bull / Neutral / Bear</text>
+
+      <line x1="190" y1="170" x2="240" y2="90"  stroke="#4fc3f7" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="190" y1="190" x2="240" y2="270" stroke="#ba68c8" stroke-width="2" marker-end="url(#arr)"/>
+
+      <rect x="500" y="100" width="280" height="160" rx="10" fill="url(#g3)" stroke="#81c784" stroke-width="2"/>
+      <text x="640" y="130" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">Stage 3 — Signal</text>
+      <text x="640" y="153" text-anchor="middle" fill="#d4f0d8" font-size="12">16 boyutlu özellik vektörü z_t</text>
+      <text x="640" y="173" text-anchor="middle" fill="#d4f0d8" font-size="11">= 3 (S1 raw) + 3 (S1 smooth)</text>
+      <text x="640" y="190" text-anchor="middle" fill="#d4f0d8" font-size="11">+ 3 (S2 one-hot) + 1 (tenure)</text>
+      <text x="640" y="207" text-anchor="middle" fill="#d4f0d8" font-size="11">+ 6 (oscillator)</text>
+      <text x="640" y="232" text-anchor="middle" fill="#fff" font-size="11">XGB / LGBM / RF / MLP</text>
+      <text x="640" y="250" text-anchor="middle" fill="#ffeb3b" font-size="12" font-weight="600">→ P(Buy / Hold / Sell)</text>
+
+      <line x1="440" y1="100" x2="500" y2="150" stroke="#4fc3f7" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="440" y1="260" x2="500" y2="210" stroke="#ba68c8" stroke-width="2" marker-end="url(#arr)"/>
+
+      <rect x="830" y="100" width="220" height="160" rx="10" fill="#1a2332" stroke="#ffb74d" stroke-width="2"/>
+      <text x="940" y="130" text-anchor="middle" fill="#ffb74d" font-size="15" font-weight="700">Trading Rules</text>
+      <text x="940" y="155" text-anchor="middle" fill="#a4b1c2" font-size="11">1. Stateful long-only</text>
+      <text x="940" y="173" text-anchor="middle" fill="#a4b1c2" font-size="11">2. Defensive reset</text>
+      <text x="940" y="191" text-anchor="middle" fill="#a4b1c2" font-size="11">3. Probability-weighted</text>
+      <text x="940" y="220" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">Sharpe / Return / MaxDD</text>
+      <text x="940" y="242" text-anchor="middle" fill="#81c784" font-size="11">vs. Buy &amp; Hold benchmark</text>
+
+      <line x1="780" y1="180" x2="830" y2="180" stroke="#ffb74d" stroke-width="2" marker-end="url(#arr)"/>
+
+      <text x="105" y="115" text-anchor="middle" fill="#4fc3f7" font-size="10" font-weight="700">[ Phase 1 ]</text>
+      <text x="340" y="25"  text-anchor="middle" fill="#4fc3f7" font-size="10" font-weight="700">[ Stage 1 ]</text>
+      <text x="340" y="345" text-anchor="middle" fill="#ba68c8" font-size="10" font-weight="700">[ Stage 2 — Rule-Based ]</text>
+      <text x="640" y="85"  text-anchor="middle" fill="#81c784" font-size="10" font-weight="700">[ Stage 3 — Soft Fusion ]</text>
+      <text x="940" y="85"  text-anchor="middle" fill="#ffb74d" font-size="10" font-weight="700">[ Backtest ]</text>
+    </svg>
+  </div>
+
+  <p style="text-align:center; color:var(--text-dim); font-size:0.9em;">
+    🟦 Rol A bölgesi · 🟪/🟩 Rol B bölgesi · 🟧 Rol C bölgesi
+  </p>
+</section>
+
+<!-- ============================================================
+     1. NIYE BU PROBLEM
+============================================================ -->
+<section id="niye">
+  <h2><span class="num">1</span>Niye Bu Problemi Seçtik?</h2>
+
+  <p>
+    BTC ve ETH gibi kripto paralarda her gün için <strong>AL / SAT / BEKLE</strong> üç sınıflı
+    bir karar problemimiz var.
+  </p>
+
+  <p>
+    <strong>Sorun:</strong> Kripto fiyatları çok gürültülü. Klasik "tek model — tüm özellikler — direkt karar"
+    yaklaşımı (<em>flat baseline</em>) ezbere kaçıyor, yeni rejimlerde patlıyor.
+  </p>
+
+  <p>
+    <strong>Çözüm fikri:</strong> Kararı parçalara ayır.
+    <em>Önce fiyat trendi nedir?</em>
+    <em>Sonra makro ortam nedir?</em> (resesyon mu, boğa mı?)
+    <em>En sonunda bu duruma göre AL/SAT/BEKLE?</em> Her aşama daha kolay bir alt-problem.
+  </p>
+
+  <blockquote>
+    <strong>Sunum cümlesi:</strong> "Tek model her şeyi öğrensin diye zorlamak yerine, problemi mantıklı parçalara
+    böldük. Her parçayı ayrı bir uzman eğitti, sonra birleştirdik."
+  </blockquote>
+</section>
+
+<!-- ============================================================
+     2. VERI TOPLAMA
+============================================================ -->
+<section id="veri">
+  <h2><span class="num">2</span>Veri Toplama (Phase 1)</h2>
+
+  <h3>Kaynak</h3>
+  <table>
+    <tr><th>Veri</th><th>Nereden</th><th>Açıklama</th></tr>
+    <tr>
+      <td>BTC OHLCV (günlük)</td>
+      <td>Yahoo Finance</td>
+      <td>2014-09-17 → 2025-12-30, 4.094 gün</td>
+    </tr>
+    <tr>
+      <td>ETH OHLCV (günlük)</td>
+      <td>Yahoo Finance</td>
+      <td>2017-08-17 → 2025-12-30, 3.060 gün</td>
+    </tr>
+    <tr>
+      <td>22 makro değişken</td>
+      <td>Yahoo + <span class="first-use">FRED <span class="expansion">(Federal Reserve Economic Data — ABD merkez bankası açık veri portalı)</span></span> API</td>
+      <td>S&amp;P 500,
+        <span class="first-use">VIX <span class="expansion">(Volatility Index — S&amp;P 500'den türetilen 'korku endeksi')</span></span>,
+        <span class="first-use">DXY <span class="expansion">(US Dollar Index — doların 6 büyük para birimine karşı sepeti)</span></span>,
+        Altın, Petrol,
+        <span class="first-use">US10Y <span class="expansion">(10 yıllık ABD devlet tahvili faizi)</span></span>,
+        <span class="first-use">US2Y <span class="expansion">(2 yıllık ABD devlet tahvili faizi)</span></span>,
+        <span class="first-use">FedFunds <span class="expansion">(Federal Funds Rate — ABD politika faizi)</span></span>,
+        <span class="first-use">CPI <span class="expansion">(Consumer Price Index — tüketici enflasyon endeksi)</span></span>,
+        <span class="first-use">M2 <span class="expansion">(geniş para arzı: nakit + vadeli mevduat)</span></span>, vs.
+      </td>
+    </tr>
+  </table>
+
+  <h3>Önemli detay: "Publication-release lag"</h3>
+  <p>
+    FRED'den gelen aylık makro veriler (CPI, FedFunds, M2) <strong>gerçekte yayınlandığı tarihte</strong>
+    kullanılır, tarihinde değil. Örnek: Ocak 2024 CPI verisi 13 Şubat'ta yayınlanır. Modelin 13 Şubat'tan
+    önce o veriyi görmemesi lazım — yoksa lookahead bias olur.
+  </p>
+  <p>Çözüm: Her veriye yayınlama gecikmesi ekledik (FedFunds 1 gün, CPI 45 gün, M2 14 gün, vs.).</p>
+
+  <h3>Özellik mühendisliği (12 türetilmiş makro özellik)</h3>
+  <ul>
+    <li>VIX → expanding-window <span class="first-use">z-score <span class="expansion">((değer − ortalama) / standart sapma — 'kaç sigma uzakta')</span></span> (kaç sigma yukarda?)</li>
+    <li>US10Y − US2Y → yield curve spread (resesyon göstergesi)</li>
+    <li>M2 → <span class="first-use">YoY <span class="expansion">(Year-over-Year — bir önceki yılın aynı dönemine göre yüzde değişim)</span></span> % change</li>
+    <li>S&amp;P 500 → 5-günlük log return</li>
+  </ul>
+
+  <figure>
+    <img src="paper/figures/fig_eng_demo.png" alt="Feature engineering demo">
+    <figcaption><strong>Şekil 1.</strong> Ham makro veri vs. özellik-mühendisliği yapılmış hâli — z-score normalizasyonu ve YoY transform sonrası modele uygun forma girer.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================
+     3. STAGE 1
+============================================================ -->
+<section id="stage1">
+  <h2><span class="num">3</span>Stage 1 — Trend Classifier (Rol A)</h2>
+
+  <h3>Etiket nereden geliyor? — ZigZag algoritması</h3>
+  <p>Sadece kapanış fiyatlarına bakarak "şu an uptrend mi, downtrend mi, range mı?" sorusuna <em>retrospektif</em> cevap üretir:</p>
+  <ol>
+    <li>Fiyat serisinde tepe ve dipleri bul (pivot noktalar).</li>
+    <li>İki pivot arası segment <strong>%10'dan fazla</strong> hareket etmişse o segmenti <code>uptrend</code> veya <code>downtrend</code> olarak işaretle.</li>
+    <li>Daha az ise <code>range</code>.</li>
+    <li>Minimum segment uzunluğu 15 gün.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Sınavda sorulabilir:</strong> "ZigZag etiketleri ileriye bakıyor — yani Şubat 2020'deki bir günün
+    etiketi sonradan üretilmiş. Bunu inference'da kullanmak hile olmaz mı?"<br><br>
+    <em>Cevap:</em> <strong>Etiket</strong> ileriye bakıyor evet, ama <strong>modelin gördüğü özellikler</strong>
+    (<span class="first-use">RSI <span class="expansion">(Relative Strength Index — 14-gün momentum osilatörü, 0–100; &gt;70 aşırı alım, &lt;30 aşırı satım)</span></span>,
+    <span class="first-use">MACD <span class="expansion">(Moving Average Convergence Divergence — iki üstel ortalamanın farkı, trend yön/güç göstergesi)</span></span>,
+    <span class="first-use">ADX <span class="expansion">(Average Directional Index — trendin gücünü ölçen 0–100 osilatör)</span></span>, vs.) sadece o güne kadar olan veriden hesaplanıyor.
+    Model sadece "bu causal özellikler hangi etikete denk geliyor?" eşleşmesini öğrenir.
+  </div>
+
+  <p>
+    Bunu kanıtlamak için <strong>lookahead testi</strong> ürettik: 106 farklı tarihte ZigZag'i o günün
+    verisiyle yeniden hesapladık. <strong>42'sinde</strong> sonuç orijinal etiketten farklı çıktı.
+    Yani ZigZag etiketi gerçekten retrospektif — bu yüzden ML modeli şart, kural-tabanlı kullanılamaz.
+  </p>
+
+  <figure>
+    <img src="paper/figures/fig_zigzag_lookahead.png" alt="ZigZag lookahead test">
+    <figcaption><strong>Şekil 2.</strong> ZigZag retrospektiflik kanıtı — 106 noktanın 42'sinde geçmişte hesaplanan etiket bugünün etiketinden farklı.</figcaption>
+  </figure>
+
+  <h3>4 model, 14 özellik</h3>
+  <ul>
+    <li><strong>Özellikler:</strong> RSI(14), MACD signal-diff (12-26-9), ADX,
+        <span class="first-use">BB <span class="expansion">(Bollinger Bands)</span></span> %B,
+        <span class="first-use">ATR <span class="expansion">(Average True Range — gerçek aralıkların 14-gün ortalaması, volatilite)</span></span>,
+        hacim z-skoru,
+        <span class="first-use">OBV <span class="expansion">(On-Balance Volume — kümülatif yön-ağırlıklı hacim)</span></span>,
+        6 farklı pencereli log return — toplam 14.</li>
+    <li><strong>Modeller:</strong>
+        <span class="first-use">XGBoost <span class="expansion">(regülerizasyonlu gradient-boosted decision trees)</span></span>,
+        <span class="first-use">LightGBM <span class="expansion">(Microsoft'un leaf-wise gradient-boosted trees, hızlı + bellek-verimli)</span></span>,
+        <span class="first-use">Random Forest <span class="expansion">(çok sayıda karar ağacının bagging ile birleştirilmesi)</span></span>,
+        <span class="first-use">MLP <span class="expansion">(Multi-Layer Perceptron — feed-forward yapay sinir ağı)</span></span>.</li>
+    <li><strong>Sınıflar:</strong> downtrend / range / uptrend.</li>
+    <li><strong>Sınıf dengesi (BTC):</strong></li>
+  </ul>
+
+  <!-- NEW SVG: Class Balance Bar -->
+  <div class="balance-bar" title="BTC Stage 1 sınıf dağılımı">
+    <div style="width:29.6%; background:#e57373;">Down · 29.6%</div>
+    <div style="width:18.2%; background:#90a4ae;">Range · 18.2%</div>
+    <div style="width:52.2%; background:#81c784;">Up · 52.2%</div>
+  </div>
+  <p style="font-size:0.85em; color:var(--text-dim); margin-top:-4px;">
+    📊 BTC Stage 1 etiket dağılımı — uptrend baskın çünkü BTC çoğu zaman boğa modunda. Bu yüzden
+    <code>class_weight='balanced'</code> kullanıldı.
+  </p>
+
+  <h3>Sonuç</h3>
+  <p>
+    Random Forest hem BTC'de (F1m=<strong>0.563</strong>) hem ETH'de (F1m=<strong>0.571</strong>) en iyisi.
+    <span class="first-use">AUC <span class="expansion">(Area Under ROC Curve — sıralama kalitesi; 0.5 chance, 1.0 mükemmel)</span></span> 0.74–0.76.
+  </p>
+
+  <figure>
+    <img src="paper/figures/fig_stage1_confusion.png" alt="Stage 1 confusion matrices">
+    <figcaption><strong>Şekil 3.</strong> Stage 1 — 4 model × 2 asset = 8 confusion matrix. Köşegenlerin baskınlığı modelin trend ayrımını yakaladığını gösteriyor.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="paper/figures/fig_stage1_truth_vs_pred_btc.png" alt="Stage 1 truth vs prediction BTC">
+    <figcaption><strong>Şekil 4.</strong> BTC için ZigZag ground-truth (üst) vs. Random Forest tahminleri (alt). Renkli bantlar trend rejimleri.</figcaption>
+  </figure>
+
+  <blockquote>
+    <strong>Sunum cümlesi (Rol A):</strong> "ZigZag bize 'gerçeği' söyleyen retrospektif bir etiket. Modeli
+    causal teknik göstergelerle eğitiyoruz, model bu göstergelerle şu anki trendi tahmin etmeyi öğreniyor."
+  </blockquote>
+</section>
+
+<!-- ============================================================
+     4. STAGE 2 FSM
+============================================================ -->
+<section id="stage2">
+  <h2><span class="num">4</span>Stage 2 — Macro Regime FSM (Rol B, kuralcı)</h2>
+
+  <p>
+    Burada <strong>öğrenilmiş model YOK</strong>. Bunu özellikle vurgulayacağız çünkü bu bilinçli bir
+    tasarım kararı.
+  </p>
+
+  <h3>Niye unsupervised başarısız oldu?</h3>
+  <ol>
+    <li><strong>Vanilla K-Means</strong> — 2008 <span class="first-use">GFC <span class="expansion">(Global Financial Crisis — 2007-2009 küresel finansal kriz)</span></span>'i bir cluster yapamadı.</li>
+    <li><strong>Semantic constrained K-Means</strong> — gürültülü, hızlı rejim değişimleri ürettiyor.</li>
+    <li><strong><span class="first-use">HMM <span class="expansion">(Hidden Markov Model — gözlenemeyen state'leri Markov geçiş matrisiyle modelleyen olasılıksal yöntem)</span></span> (3 Gaussian state)</strong> — geçiş olasılıkları kararsız.</li>
+    <li><strong>3-bileşenli <span class="first-use">GMM <span class="expansion">(Gaussian Mixture Model — K Gauss dağılımının ağırlıklı toplamı)</span></span></strong> — 2024-2025'te P(Stress) ≈ 0.96'ya saplanıp orada kalıyor.</li>
+  </ol>
+
+  <h3>Çözüm: Deterministic FSM (8 kural + 1 guard)</h3>
+  <p>3 sınıf: <strong>Bear / Neutral / Bull</strong>.</p>
+  <ol>
+    <li><strong>VIX hysteresis:</strong> Bear'a giriş VIX z-skoru &gt; 1.0, çıkış z &lt; 0.3 (asimetrik).</li>
+    <li><strong>Min dwell:</strong> Bear ≥ 20 gün, Bull ≥ 40 gün, Neutral ≥ 10 gün.</li>
+    <li><strong>Bear→Neutral velocity:</strong> ΔVIX_z[10gün] &lt; -0.8 ise Bull'a hızlı geçiş.</li>
+    <li><strong>Persistent yield curve inversion:</strong> 60-gün rolling US10Y−US2Y &lt; 0 → Bear sinyali.</li>
+    <li><strong>DXY+M2 macro stress:</strong> DXY z[30] &gt; 0.7 VE M2 YoY &lt; %4 → Bear override.</li>
+    <li><strong>Bull velocity entry:</strong> V-shape recovery'de hızlı Bull girişi.</li>
+    <li><strong>Bear velocity entry:</strong> Hızlı escalation.</li>
+    <li><strong>Bear re-entry guard:</strong> Bear'dan Neutral'a çıktıktan sonra 35 gün Neutral'da kal.</li>
+  </ol>
+
+  <h3>Sonuç</h3>
+  <p>
+    2008 GFC'yi, 2018-Q4 düşüşü, 2020-COVID, 2022 ayı piyasası, 2025-04 tarife şoku — hepsini
+    <strong>doğru</strong> Bear olarak işaretledi. 2009 V-recovery, 2020 V, 2025-05 toparlanma — hepsi Bull.
+  </p>
+
+  <figure>
+    <img src="paper/figures/fig_stage2_fsm.png" alt="Stage 2 FSM regime classification">
+    <figcaption><strong>Şekil 5.</strong> Stage 2 FSM çıktısı — kırmızı bantlar Bear, sarı Neutral, yeşil Bull. Tüm tarihi kriz dönemleri doğru renkte.</figcaption>
+  </figure>
+
+  <blockquote>
+    <strong>Sunum cümlesi (Rol B):</strong> "Unsupervised yaklaşımlar makro rejimi yakalayamadı çünkü etiketli
+    veri yok ve clustering 2008 gibi kritik olayları kaçırıyor. Bu yüzden 8 kurallı bir finite-state machine
+    tasarladık — finansta makro rejim zaten heuristic ile tanımlanır."
+  </blockquote>
+
+  <div class="callout">
+    <strong>Olası soru:</strong> "ML projesinde rule-based stage olur mu?"<br>
+    <em>Cevap:</em> "Stage 2 <strong>modelimiz</strong> öğrenmiyor ama <strong>çıktısı</strong>
+    (Bull/Neutral/Bear posterior'u) Stage 3'e ML özelliği olarak giriyor. Hibrit pipeline. Hamilton 1989,
+    Ang &amp; Bekaert 2002 gibi makaleler de Markov-switching ile aynı mantığı yapıyor, biz deterministik
+    kuralları tercih ettik."
+  </div>
+</section>
+
+<!-- ============================================================
+     5. STAGE 3
+============================================================ -->
+<section id="stage3">
+  <h2><span class="num">5</span>Stage 3 — Signal Classifier (Rol B, esas iş)</h2>
+
+  <p>
+    Burası kalbi. Stage 1 ve Stage 2'nin çıktılarını <strong>soft fusion</strong> ile birleştirip
+    AL/SAT/BEKLE kararı veriyor.
+  </p>
+
+  <h3>Etiket nereden geliyor? — Adaptif eşik</h3>
+  <p>Forward 5-günlük getiri kullanıyoruz:</p>
+<pre><code>y_t = Buy   eğer (P_{t+5} - P_t) / P_t > +0.5 × σ_t
+y_t = Sell  eğer (P_{t+5} - P_t) / P_t < -0.5 × σ_t
+y_t = Hold  diğer durumda</code></pre>
+  <p>
+    Burada σ_t = son 20 günün <strong>causal</strong> standart sapması (ileriye bakmaz).
+    <strong>Niye 0.5 sigma?</strong> k=0.5 değerinde sınıflar dengeli (%43 Buy / %23 Hold / %34 Sell).
+  </p>
+
+  <!-- NEW SVG: Stage 3 16-dim feature vector breakdown -->
+  <div class="diagram-svg">
+    <svg viewBox="0 0 1100 230" xmlns="http://www.w3.org/2000/svg">
+      <!-- Title -->
+      <text x="550" y="22" text-anchor="middle" fill="#e8edf3" font-size="14" font-weight="700">
+        z_t ∈ ℝ¹⁶ — Stage 3 Özellik Vektörü Kırılımı
+      </text>
+
+      <!-- 16 boxes -->
+      <!-- Group 1: S1 raw posterior (3) -->
+      <g>
+        <rect x="40"  y="60" width="60" height="60" fill="#1e3a5f" stroke="#4fc3f7" stroke-width="2"/>
+        <rect x="105" y="60" width="60" height="60" fill="#1e3a5f" stroke="#4fc3f7" stroke-width="2"/>
+        <rect x="170" y="60" width="60" height="60" fill="#1e3a5f" stroke="#4fc3f7" stroke-width="2"/>
+        <text x="70"  y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">P_dn</text>
+        <text x="135" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">P_rg</text>
+        <text x="200" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">P_up</text>
+        <text x="70"  y="108" text-anchor="middle" fill="#cbd5e0" font-size="9">raw</text>
+        <text x="135" y="108" text-anchor="middle" fill="#cbd5e0" font-size="9">raw</text>
+        <text x="200" y="108" text-anchor="middle" fill="#cbd5e0" font-size="9">raw</text>
+        <text x="135" y="145" text-anchor="middle" fill="#4fc3f7" font-size="11" font-weight="700">3 — Stage 1 raw posterior</text>
+        <text x="135" y="160" text-anchor="middle" fill="#a4b1c2" font-size="10">trend olasılıkları (anlık)</text>
+      </g>
+
+      <!-- Group 2: S1 smooth-10 (3) -->
+      <g>
+        <rect x="260" y="60" width="60" height="60" fill="#2c5282" stroke="#4fc3f7" stroke-width="2"/>
+        <rect x="325" y="60" width="60" height="60" fill="#2c5282" stroke="#4fc3f7" stroke-width="2"/>
+        <rect x="390" y="60" width="60" height="60" fill="#2c5282" stroke="#4fc3f7" stroke-width="2"/>
+        <text x="290" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">P_dn</text>
+        <text x="355" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">P_rg</text>
+        <text x="420" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">P_up</text>
+        <text x="290" y="108" text-anchor="middle" fill="#cbd5e0" font-size="9">10g</text>
+        <text x="355" y="108" text-anchor="middle" fill="#cbd5e0" font-size="9">10g</text>
+        <text x="420" y="108" text-anchor="middle" fill="#cbd5e0" font-size="9">10g</text>
+        <text x="355" y="145" text-anchor="middle" fill="#4fc3f7" font-size="11" font-weight="700">3 — Stage 1 smooth-10</text>
+        <text x="355" y="160" text-anchor="middle" fill="#a4b1c2" font-size="10">10-gün rolling avg (gürültü filtre)</text>
+      </g>
+
+      <!-- Group 3: S2 one-hot (3) -->
+      <g>
+        <rect x="480" y="60" width="60" height="60" fill="#553c7b" stroke="#ba68c8" stroke-width="2"/>
+        <rect x="545" y="60" width="60" height="60" fill="#553c7b" stroke="#ba68c8" stroke-width="2"/>
+        <rect x="610" y="60" width="60" height="60" fill="#553c7b" stroke="#ba68c8" stroke-width="2"/>
+        <text x="510" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">Bear</text>
+        <text x="575" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">Ntl</text>
+        <text x="640" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">Bull</text>
+        <text x="510" y="108" text-anchor="middle" fill="#e9d8fd" font-size="9">{0,1}</text>
+        <text x="575" y="108" text-anchor="middle" fill="#e9d8fd" font-size="9">{0,1}</text>
+        <text x="640" y="108" text-anchor="middle" fill="#e9d8fd" font-size="9">{0,1}</text>
+        <text x="575" y="145" text-anchor="middle" fill="#ba68c8" font-size="11" font-weight="700">3 — Stage 2 one-hot</text>
+        <text x="575" y="160" text-anchor="middle" fill="#a4b1c2" font-size="10">FSM rejim çıktısı</text>
+      </g>
+
+      <!-- Group 4: tenure (1) -->
+      <g>
+        <rect x="700" y="60" width="60" height="60" fill="#7c4a1a" stroke="#ffb74d" stroke-width="2"/>
+        <text x="730" y="90" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">τ_t</text>
+        <text x="730" y="108" text-anchor="middle" fill="#ffe0b2" font-size="9">days</text>
+        <text x="730" y="145" text-anchor="middle" fill="#ffb74d" font-size="11" font-weight="700">1 — tenure</text>
+        <text x="730" y="160" text-anchor="middle" fill="#a4b1c2" font-size="10">rejim yaşı</text>
+      </g>
+
+      <!-- Group 5: 6 oscillators -->
+      <g>
+        <rect x="790" y="60" width="42" height="60" fill="#2f5d3f" stroke="#81c784" stroke-width="2"/>
+        <rect x="837" y="60" width="42" height="60" fill="#2f5d3f" stroke="#81c784" stroke-width="2"/>
+        <rect x="884" y="60" width="42" height="60" fill="#2f5d3f" stroke="#81c784" stroke-width="2"/>
+        <rect x="931" y="60" width="42" height="60" fill="#2f5d3f" stroke="#81c784" stroke-width="2"/>
+        <rect x="978" y="60" width="42" height="60" fill="#2f5d3f" stroke="#81c784" stroke-width="2"/>
+        <rect x="1025" y="60" width="42" height="60" fill="#2f5d3f" stroke="#81c784" stroke-width="2"/>
+        <text x="811" y="93" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">RSI</text>
+        <text x="858" y="93" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">MACD</text>
+        <text x="905" y="93" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">BB%B</text>
+        <text x="952" y="93" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">Stoch</text>
+        <text x="999" y="93" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">vol z</text>
+        <text x="1046" y="93" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">OBV</text>
+        <text x="928" y="145" text-anchor="middle" fill="#81c784" font-size="11" font-weight="700">6 — oscillator özellikleri</text>
+        <text x="928" y="160" text-anchor="middle" fill="#a4b1c2" font-size="10">teknik göstergeler (causal)</text>
+      </g>
+
+      <!-- Bracket -->
+      <text x="550" y="200" text-anchor="middle" fill="#ffeb3b" font-size="13" font-weight="700">
+        Toplam: 3 + 3 + 3 + 1 + 6 = 16 boyutlu özellik vektörü
+      </text>
+      <text x="550" y="218" text-anchor="middle" fill="#a4b1c2" font-size="10" font-style="italic">
+        soft fusion = posterior'lar (olasılık) hard label yerine taşınır
+      </text>
+    </svg>
+    <div class="caption"><strong>Şekil 6.</strong> Stage 3 girdi vektörünün anatomisi. Mavi = Stage 1 trend posterior'u, mor = Stage 2 makro rejim, turuncu = rejim yaşı, yeşil = teknik göstergeler.</div>
+  </div>
+
+  <h3>4 model</h3>
+  <p>Yine XGBoost, LightGBM, Random Forest, MLP — Stage 1 ile aynı 4 model.</p>
+
+  <h3>Sonuç (default 3-Stage Full mimari)</h3>
+  <ul>
+    <li>BTC en iyi: XGBoost, F1m = <strong>0.367</strong>, AUC = 0.530</li>
+    <li>ETH en iyi: XGBoost, F1m = <strong>0.368</strong>, AUC = 0.530</li>
+  </ul>
+  <p>
+    F1=0.37, AUC=0.53 düşük gibi gelebilir — chance %33, biz biraz üstündeyiz. Ama
+    <strong>trading'de F1 yetmez. Sharpe iyi.</strong> Birazdan açıklanacak.
+  </p>
+
+  <figure>
+    <img src="paper/figures/fig_stage3_roc_curves.png" alt="Stage 3 ROC curves">
+    <figcaption><strong>Şekil 7.</strong> Stage 3 — 4 model için per-class
+    <span class="first-use">ROC <span class="expansion">(Receiver Operating Characteristic — TPR vs FPR eğrisi)</span></span>
+    eğrileri. Hold sınıfının AUC'si en yüksek — model 'emin değilim' demeyi en iyi öğreniyor.</figcaption>
+  </figure>
+
+  <figure class="wide-fig">
+    <img src="paper/figures/fig_arch_diagram.png" alt="Architecture diagram">
+    <figcaption><strong>Şekil 8.</strong> Hiyerarşik mimari blok-diyagramı (TikZ ile çizildi). Soft fusion çıktıları sürekli ok ile gösterilmiş.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================
+     6. WALK-FORWARD CV
+============================================================ -->
+<section id="cv">
+  <h2><span class="num">6</span>Walk-Forward Cross-Validation (Rol C)</h2>
+
+  <h3>Niye normal K-fold değil?</h3>
+  <p>
+    Klasik K-fold zamanı karıştırır — train fold'da 2025 verisi, test fold'da 2018 verisi olabilir.
+    <strong>Geleceği bilerek geçmişi tahmin etmek = leakage = sahte yüksek skor.</strong>
+  </p>
+
+  <h3>Expanding-window walk-forward</h3>
+
+  <!-- NEW SVG: Walk-forward CV diagram -->
+  <div class="diagram-svg">
+    <svg viewBox="0 0 1000 320" xmlns="http://www.w3.org/2000/svg">
+      <!-- Time axis -->
+      <text x="500" y="20" text-anchor="middle" fill="#e8edf3" font-size="13" font-weight="700">
+        Walk-Forward CV (Expanding Window)
+      </text>
+      <line x1="80" y1="290" x2="940" y2="290" stroke="#a4b1c2" stroke-width="1"/>
+      <text x="80"  y="308" text-anchor="middle" fill="#a4b1c2" font-size="10">2014</text>
+      <text x="280" y="308" text-anchor="middle" fill="#a4b1c2" font-size="10">2017</text>
+      <text x="500" y="308" text-anchor="middle" fill="#a4b1c2" font-size="10">2020</text>
+      <text x="720" y="308" text-anchor="middle" fill="#a4b1c2" font-size="10">2023</text>
+      <text x="940" y="308" text-anchor="middle" fill="#a4b1c2" font-size="10">2025 →</text>
+
+      <!-- Fold 1 -->
+      <text x="40" y="60" fill="#e8edf3" font-size="11" font-weight="700">Fold 1</text>
+      <rect x="80"  y="48" width="200" height="22" fill="#2c5282"/>
+      <rect x="280" y="48" width="20"  height="22" fill="#e57373"/>
+      <rect x="300" y="48" width="80"  height="22" fill="#81c784"/>
+
+      <!-- Fold 2 -->
+      <text x="40" y="100" fill="#e8edf3" font-size="11" font-weight="700">Fold 2</text>
+      <rect x="80"  y="88" width="280" height="22" fill="#2c5282"/>
+      <rect x="360" y="88" width="20"  height="22" fill="#e57373"/>
+      <rect x="380" y="88" width="80"  height="22" fill="#81c784"/>
+
+      <!-- Fold 3 -->
+      <text x="40" y="140" fill="#e8edf3" font-size="11" font-weight="700">Fold 3</text>
+      <rect x="80"  y="128" width="360" height="22" fill="#2c5282"/>
+      <rect x="440" y="128" width="20"  height="22" fill="#e57373"/>
+      <rect x="460" y="128" width="80"  height="22" fill="#81c784"/>
+
+      <!-- Fold 4 -->
+      <text x="40" y="180" fill="#e8edf3" font-size="11" font-weight="700">Fold 4</text>
+      <rect x="80"  y="168" width="440" height="22" fill="#2c5282"/>
+      <rect x="520" y="168" width="20"  height="22" fill="#e57373"/>
+      <rect x="540" y="168" width="80"  height="22" fill="#81c784"/>
+
+      <!-- ... -->
+      <text x="40"  y="220" fill="#e8edf3" font-size="11" font-weight="700">…</text>
+      <text x="350" y="220" fill="#a4b1c2" font-size="10" font-style="italic">… toplam 12-16 fold (asset'e göre)</text>
+
+      <!-- Fold N -->
+      <text x="40" y="260" fill="#e8edf3" font-size="11" font-weight="700">Fold N</text>
+      <rect x="80"  y="248" width="760" height="22" fill="#2c5282"/>
+      <rect x="840" y="248" width="20"  height="22" fill="#e57373"/>
+      <rect x="860" y="248" width="80"  height="22" fill="#81c784"/>
+
+      <!-- Legend -->
+      <rect x="600" y="40" width="14" height="14" fill="#2c5282"/>
+      <text x="620" y="52" fill="#cbd5e0" font-size="11">Train (expanding)</text>
+      <rect x="760" y="40" width="14" height="14" fill="#e57373"/>
+      <text x="780" y="52" fill="#cbd5e0" font-size="11">Gap (10g)</text>
+      <rect x="860" y="40" width="14" height="14" fill="#81c784"/>
+      <text x="880" y="52" fill="#cbd5e0" font-size="11">Validate (200g)</text>
+    </svg>
+    <div class="caption"><strong>Şekil 9.</strong> Walk-forward CV yapısı — train her fold'da büyür, gap leakage'ı önler, validate sabit 200 gün. Hiçbir fold "gelecekten geçmişe" tahmin yapmaz.</div>
+  </div>
+
+  <ul>
+    <li><strong>gap = 10 gün:</strong> label horizon 5 günden büyük, leakage'ı önler.</li>
+    <li><strong>validation window = 200 gün.</strong></li>
+    <li><strong>BTC:</strong> 16 outer fold (Stage 1) / 12 fold (Stage 3).</li>
+    <li><strong>ETH:</strong> 10 outer fold (Stage 1) / 6 fold (Stage 3).</li>
+  </ul>
+
+  <h3>Hyperparameter tuning</h3>
+  <p>
+    Her model için 30 trial, <strong>5-fold inner CV</strong> (yine walk-forward).
+    İlk denemede 3-fold yapmıştık, Optuna <code>min_samples_leaf=1</code> (degenerate değer) seçti ve
+    outer CV'de un-tuned baseline'dan <strong>kötü</strong> çıktı. 5-fold'a geçince düzeldi.
+  </p>
+
+  <h3>Software</h3>
+  <p>
+    Python 3.11, scikit-learn 1.8, XGBoost 3.2, LightGBM 4.6, Optuna 4.8. Hepsi tek bir
+    MacBook Air M1'de döndü, <strong>1 saat 43 dakika</strong> total walk-forward + tuning.
+  </p>
+</section>
+
+<!-- ============================================================
+     7. ABLATION
+============================================================ -->
+<section id="ablation">
+  <h2><span class="num">7</span>Mimari Ablation — En İlginç Bulgu (Rol C)</h2>
+
+  <p>Hocaya satacağımız esas hikaye burası.</p>
+
+  <h3>4 Mimari karşılaştırdık</h3>
+  <table>
+    <tr><th>Mimari</th><th>Stage 3'e ne giriyor</th><th>Toplam özellik</th></tr>
+    <tr><td><strong>Flat</strong></td><td>Sadece 6 oscillator</td><td>6</td></tr>
+    <tr><td><strong>2-Stage Trend</strong></td><td>Stage 1 posterior + 6 oscillator</td><td>6 + 6 = 12</td></tr>
+    <tr><td><strong>2-Stage Macro</strong></td><td>Stage 2 regime + 6 oscillator</td><td>6 + 4 = 10</td></tr>
+    <tr><td><strong>3-Stage Full</strong></td><td>Stage 1 + Stage 2 + 6 oscillator</td><td>6 + 6 + 4 = 16</td></tr>
+  </table>
+
+  <h3>Sonuç</h3>
+  <table>
+    <tr><th></th><th>BTC</th><th>ETH</th></tr>
+    <tr><td>Flat</td><td>Sharpe 0.93</td><td><strong>Sharpe 0.52 (en iyi!)</strong></td></tr>
+    <tr><td>2-Stage Trend</td><td>Sharpe 1.08</td><td>Sharpe 0.39</td></tr>
+    <tr><td>2-Stage Macro</td><td>Sharpe 0.98</td><td>Sharpe 0.47</td></tr>
+    <tr><td><strong>3-Stage Full</strong></td><td><strong>Sharpe 1.15 (en iyi!)</strong></td><td>Sharpe 0.34</td></tr>
+    <tr><td>Buy &amp; Hold benchmark</td><td>Sharpe 0.95</td><td>Sharpe 0.26</td></tr>
+  </table>
+
+  <figure>
+    <img src="paper/figures/fig_arch_heatmap.png" alt="Architecture × Model heatmap">
+    <figcaption><strong>Şekil 10.</strong> 4 mimari × 4 model × 2 asset Sharpe heatmap. BTC bloğunda derinleşen mimari koyu yeşil, ETH bloğunda tersine — no-free-lunch'ın görsel kanıtı.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="paper/figures/fig_arch_equity.png" alt="Equity curves comparison">
+    <figcaption><strong>Şekil 11.</strong> 4 mimarinin BTC + ETH için equity curve'leri. BTC'de 3-Stage en yüksek; ETH'de Flat baseline en yüksek.</figcaption>
+  </figure>
+
+  <div class="callout danger">
+    <strong>Şok edici bulgu:</strong>
+    <ul>
+      <li>BTC için: Daha derin mimari → daha iyi Sharpe (monotonik artış 0.93 → 1.15).</li>
+      <li>ETH için: Daha derin mimari → daha kötü Sharpe (0.52 → 0.34).</li>
+    </ul>
+    <em>Açıklamamız:</em> BTC veri seti uzun (10 yıl, çoklu rejim) — hiyerarşik özellikler değer katıyor.
+    ETH veri seti kısa (5 yıl, 2020-2022 dynamics dominant) — ekstra özellikler overfit ediyor.
+    Bu <strong>"no-free-lunch"</strong> teoreminin somut bir örneği.
+  </div>
+
+  <blockquote>
+    <strong>Sunum cümlesi (Rol C):</strong> "İlk başta 3-stage'in her varlık için iyi olacağını düşündük.
+    Ablation çalışmamız BTC için doğru olduğunu, ETH için tersinin olduğunu gösterdi. Bu finansal ML'de
+    no-free-lunch'ın somut bir örneği — veri büyüklüğü mimari kararını etkiler."
+  </blockquote>
+</section>
+
+<!-- ============================================================
+     8. TRADING RULES
+============================================================ -->
+<section id="trading">
+  <h2><span class="num">8</span>Trading Rules — F1 Düşük Olsa da Sharpe Yüksek (Rol C)</h2>
+
+  <p>Stage 3 modeli AL/SAT/BEKLE olasılıkları üretiyor. Bu olasılıkları gerçek trade'lere çevirmek için 3 kural denedik:</p>
+
+  <!-- NEW SVG: Trading rules side-by-side comparison -->
+  <div class="diagram-svg">
+    <svg viewBox="0 0 1100 280" xmlns="http://www.w3.org/2000/svg">
+      <text x="550" y="22" text-anchor="middle" fill="#e8edf3" font-size="13" font-weight="700">
+        3 Trading Rule — Aynı Tahmin Sekansına Verilen 3 Farklı Tepki
+      </text>
+
+      <!-- Common: probability sequence at top -->
+      <text x="40" y="55" fill="#a4b1c2" font-size="10">Tahmin:</text>
+      <g font-size="10" font-weight="700" text-anchor="middle">
+        <rect x="100" y="42" width="50" height="18" fill="#81c784"/><text x="125" y="55" fill="#000">Buy</text>
+        <rect x="155" y="42" width="50" height="18" fill="#81c784"/><text x="180" y="55" fill="#000">Buy</text>
+        <rect x="210" y="42" width="50" height="18" fill="#90a4ae"/><text x="235" y="55" fill="#000">Hold</text>
+        <rect x="265" y="42" width="50" height="18" fill="#90a4ae"/><text x="290" y="55" fill="#000">Hold</text>
+        <rect x="320" y="42" width="50" height="18" fill="#e57373"/><text x="345" y="55" fill="#000">Sell</text>
+        <rect x="375" y="42" width="50" height="18" fill="#90a4ae"/><text x="400" y="55" fill="#000">Hold</text>
+        <rect x="430" y="42" width="50" height="18" fill="#81c784"/><text x="455" y="55" fill="#000">Buy</text>
+      </g>
+
+      <!-- Rule 1: Stateful Long-Only -->
+      <text x="40" y="92" fill="#4fc3f7" font-size="11" font-weight="700">Stateful</text>
+      <text x="40" y="106" fill="#4fc3f7" font-size="11" font-weight="700">long-only</text>
+      <line x1="100" y1="110" x2="490" y2="110" stroke="#444" stroke-width="1" stroke-dasharray="2,2"/>
+      <rect x="100" y="80"  width="220" height="20" fill="#81c784" opacity="0.7"/>
+      <text x="210" y="94" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG (pozisyonda)</text>
+      <rect x="320" y="115" width="110" height="20" fill="#fff" stroke="#444"/>
+      <text x="375" y="129" text-anchor="middle" fill="#000" font-size="10" font-weight="700">💵 NAKİT</text>
+      <rect x="430" y="80"  width="60"  height="20" fill="#81c784" opacity="0.7"/>
+      <text x="460" y="94" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG</text>
+      <text x="540" y="105" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">2 trade</strong> (Sell'de çık, Buy'da gir)</text>
+
+      <!-- Rule 2: Defensive Reset -->
+      <text x="40" y="170" fill="#ba68c8" font-size="11" font-weight="700">Defensive</text>
+      <text x="40" y="184" fill="#ba68c8" font-size="11" font-weight="700">reset</text>
+      <line x1="100" y1="188" x2="490" y2="188" stroke="#444" stroke-width="1" stroke-dasharray="2,2"/>
+      <rect x="100" y="158" width="110" height="20" fill="#81c784" opacity="0.7"/>
+      <text x="155" y="172" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG</text>
+      <rect x="210" y="193" width="220" height="20" fill="#fff" stroke="#444"/>
+      <text x="320" y="207" text-anchor="middle" fill="#000" font-size="10" font-weight="700">💵 NAKİT (Hold dahil!)</text>
+      <rect x="430" y="158" width="60" height="20" fill="#81c784" opacity="0.7"/>
+      <text x="460" y="172" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG</text>
+      <text x="540" y="183" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">4 trade</strong> (Hold = nakit, çok savunmacı)</text>
+
+      <!-- Rule 3: Probability-Weighted -->
+      <text x="40" y="248" fill="#ffb74d" font-size="11" font-weight="700">Probability</text>
+      <text x="40" y="262" fill="#ffb74d" font-size="11" font-weight="700">weighted</text>
+      <line x1="100" y1="266" x2="490" y2="266" stroke="#444" stroke-width="1" stroke-dasharray="2,2"/>
+      <!-- continuous sizing bars: Buy0.7→0.7, Buy0.65→0.65, Hold→0.3, Hold→0.25, Sell→0, Hold→0.2, Buy→0.6 -->
+      <g>
+        <rect x="100" y="240" width="50" height="20" fill="#81c784" opacity="0.85"/>
+        <text x="125" y="254" text-anchor="middle" fill="#000" font-size="9" font-weight="700">85%</text>
+        <rect x="155" y="244" width="50" height="16" fill="#81c784" opacity="0.7"/>
+        <text x="180" y="255" text-anchor="middle" fill="#000" font-size="9" font-weight="700">70%</text>
+        <rect x="210" y="252" width="50" height="8" fill="#81c784" opacity="0.4"/>
+        <text x="235" y="262" text-anchor="middle" fill="#000" font-size="9" font-weight="700">25%</text>
+        <rect x="265" y="254" width="50" height="6" fill="#81c784" opacity="0.4"/>
+        <text x="290" y="262" text-anchor="middle" fill="#000" font-size="9" font-weight="700">15%</text>
+        <rect x="320" y="259" width="50" height="1" fill="#fff" stroke="#444"/>
+        <text x="345" y="269" text-anchor="middle" fill="#a4b1c2" font-size="9" font-weight="700">0%</text>
+        <rect x="375" y="252" width="50" height="8" fill="#81c784" opacity="0.4"/>
+        <text x="400" y="262" text-anchor="middle" fill="#000" font-size="9" font-weight="700">25%</text>
+        <rect x="430" y="246" width="50" height="14" fill="#81c784" opacity="0.6"/>
+        <text x="455" y="257" text-anchor="middle" fill="#000" font-size="9" font-weight="700">60%</text>
+      </g>
+      <text x="540" y="261" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">7 küçük ayar</strong> (clip(P_Buy − P_Sell, 0, 1))</text>
+    </svg>
+    <div class="caption"><strong>Şekil 12.</strong> 3 trading kuralı aynı tahmin sekansına nasıl tepki verir. Stateful = inertial, defensive = paranoid, probability-weighted = sürekli.</div>
+  </div>
+
+  <h3>Sonuç</h3>
+  <ul>
+    <li><strong>BTC:</strong> Stateful long-only kazandı (Sharpe 1.15) — test dönemi boğa-ağırlıklı.</li>
+    <li><strong>ETH:</strong> Probability-weighted kazandı (Sharpe 0.52) — ETH volatil, soft sizing güvenli.</li>
+  </ul>
+
+  <h3>Niye bu önemli?</h3>
+  <p>F1=0.37 ile Sharpe=1.15 nasıl?</p>
+  <p>
+    <strong>Cevap:</strong> Hold sınıfı <em>risk filtresi</em> gibi davranıyor. Model emin olmadığı günlerde
+    Hold tahmini yapıyor → trading kuralı o gün trade etmiyor → sermayeyi koruyor. 2-sınıflı bir model bu
+    lüksü kaybeder.
+  </p>
+  <p>
+    Sayı: BTC için 2.200 trading günü içinde sadece <strong>179 trade</strong> yaptık.
+  </p>
+
+  <blockquote>
+    <strong>Sunum cümlesi (Rol C):</strong> "F1=0.37 düşük gibi ama Hold sınıfı sayesinde model emin
+    olmadığı günlerde abstain ediyor. Sadece güvendiği günlerde trade yapınca Sharpe 1.15'e çıkıyor."
+  </blockquote>
+</section>
+
+<!-- ============================================================
+     9. BACKTEST
+============================================================ -->
+<section>
+  <h2><span class="num">9</span>Backtest Detayları</h2>
+
+  <ul>
+    <li><strong>Transaction cost:</strong> %0.1 one-way (kripto spot için makul, slippage paper'da limitasyon olarak yazılı).</li>
+    <li><strong>Buy &amp; Hold benchmark:</strong> aynı <span class="first-use">OOF <span class="expansion">(Out-of-Fold — CV validation tahminleri)</span></span> aralığında.</li>
+    <li><strong>Sharpe:</strong> 252 trading günü annualization.</li>
+  </ul>
+
+  <h3>Final sayılar</h3>
+  <table>
+    <tr><th></th><th>Sharpe</th><th>Total return</th>
+        <th><span class="first-use">MaxDD <span class="expansion">(Maximum Drawdown — peak-to-trough en büyük düşüş; küçük olması iyi)</span></span></th>
+        <th>F1m</th></tr>
+    <tr><td><strong>BTC 3-Stage Full</strong></td><td><strong>1.15</strong></td><td><strong>+2901%</strong></td><td>-46%</td><td>0.367</td></tr>
+    <tr><td>BTC Buy &amp; Hold</td><td>0.95</td><td>+2972%</td><td>-77%</td><td>—</td></tr>
+    <tr><td><strong>ETH Flat baseline</strong></td><td><strong>0.52</strong></td><td><strong>+26%</strong></td><td>-18%</td><td>0.354</td></tr>
+    <tr><td>ETH Buy &amp; Hold</td><td>0.26</td><td><strong>−7%</strong></td><td>-72%</td><td>—</td></tr>
+  </table>
+
+  <!-- NEW SVG: Sharpe + MaxDD comparison bars -->
+  <div class="diagram-svg">
+    <svg viewBox="0 0 1000 300" xmlns="http://www.w3.org/2000/svg">
+      <text x="500" y="20" text-anchor="middle" fill="#e8edf3" font-size="13" font-weight="700">
+        Sharpe (yüksek iyi) vs. MaxDD (düşük iyi) — Strateji vs. Buy &amp; Hold
+      </text>
+
+      <!-- Sharpe panel -->
+      <text x="240" y="55" text-anchor="middle" fill="#4fc3f7" font-size="12" font-weight="700">Sharpe Ratio</text>
+      <line x1="80" y1="240" x2="400" y2="240" stroke="#a4b1c2" stroke-width="1"/>
+      <line x1="80" y1="240" x2="80"  y2="70"  stroke="#a4b1c2" stroke-width="1"/>
+      <!-- BTC strategy -->
+      <rect x="100" y="125" width="50" height="115" fill="#81c784"/>
+      <text x="125" y="120" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">1.15</text>
+      <text x="125" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">BTC bizim</text>
+      <!-- BTC B&H -->
+      <rect x="160" y="145" width="50" height="95" fill="#90a4ae"/>
+      <text x="185" y="140" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">0.95</text>
+      <text x="185" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">BTC B&amp;H</text>
+      <text x="185" y="272" text-anchor="middle" fill="#a4b1c2" font-size="9" font-style="italic">+0.20</text>
+      <!-- ETH strategy -->
+      <rect x="260" y="188" width="50" height="52" fill="#81c784"/>
+      <text x="285" y="183" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">0.52</text>
+      <text x="285" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">ETH bizim</text>
+      <!-- ETH B&H -->
+      <rect x="320" y="214" width="50" height="26" fill="#90a4ae"/>
+      <text x="345" y="209" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">0.26</text>
+      <text x="345" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">ETH B&amp;H</text>
+      <text x="345" y="272" text-anchor="middle" fill="#a4b1c2" font-size="9" font-style="italic">+0.26 (2× iyileşme)</text>
+
+      <!-- MaxDD panel -->
+      <text x="760" y="55" text-anchor="middle" fill="#e57373" font-size="12" font-weight="700">Maximum Drawdown</text>
+      <line x1="600" y1="240" x2="940" y2="240" stroke="#a4b1c2" stroke-width="1"/>
+      <line x1="600" y1="240" x2="600" y2="70"  stroke="#a4b1c2" stroke-width="1"/>
+      <!-- BTC strategy -->
+      <rect x="620" y="170" width="50" height="70" fill="#81c784"/>
+      <text x="645" y="165" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">-46%</text>
+      <text x="645" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">BTC bizim</text>
+      <!-- BTC B&H -->
+      <rect x="680" y="125" width="50" height="115" fill="#e57373"/>
+      <text x="705" y="120" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">-77%</text>
+      <text x="705" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">BTC B&amp;H</text>
+      <text x="705" y="272" text-anchor="middle" fill="#a4b1c2" font-size="9" font-style="italic">31% daha az kayıp</text>
+      <!-- ETH strategy -->
+      <rect x="780" y="213" width="50" height="27" fill="#81c784"/>
+      <text x="805" y="208" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">-18%</text>
+      <text x="805" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">ETH bizim</text>
+      <!-- ETH B&H -->
+      <rect x="840" y="132" width="50" height="108" fill="#e57373"/>
+      <text x="865" y="127" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">-72%</text>
+      <text x="865" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">ETH B&amp;H</text>
+      <text x="865" y="272" text-anchor="middle" fill="#a4b1c2" font-size="9" font-style="italic">54% daha az kayıp!</text>
+    </svg>
+    <div class="caption"><strong>Şekil 13.</strong> Strateji vs. Buy &amp; Hold karşılaştırması — her iki asset için Sharpe yüksek, MaxDD düşük. Risk-adjusted return iyileşmesi bariz.</div>
+  </div>
+
+  <div class="callout success">
+    <strong>Vurgu:</strong> ETH için Buy &amp; Hold <strong>eksiye düşmüş</strong> (−%7), bizim model
+    <strong>+%26</strong>. Sadece Sharpe iyileşmesi değil, mutlak getiri farkı da var.
+  </div>
+</section>
+
+<!-- ============================================================
+     10. SISTEM
+============================================================ -->
+<section id="sistem">
+  <h2><span class="num">10</span>Sistem (Docker + FastAPI + Web UI) — Rol C</h2>
+
+  <p>Hocanın sistem gereksinimi: <strong>Docker container içinde FastAPI backend + HTML web UI + canlı tahmin</strong>.</p>
+
+  <h3>Mimari</h3>
+<pre><code>[ Browser ]
+    ↓ <span class="first-use">HTTP <span class="expansion">(HyperText Transfer Protocol — web istek-cevap protokolü)</span></span> request
+[ FastAPI server (Python) ]
+    ↓ load saved sklearn models
+[ XGBoost / LightGBM / RF / MLP modelleri (pickle) ]
+    ↓ predict
+[ Chart.js ile equity curve render ]</code></pre>
+
+  <h3>Özellikler</h3>
+  <ul>
+    <li>Web UI'de model + mimari seçilebilir (Flat / 2-Stage / 3-Stage / vs.)</li>
+    <li>Trading kuralı seçilebilir (stateful / defensive / probability-weighted)</li>
+    <li>Canlı equity curve, trade marker'ları ile (yeşil = entry, kırmızı = exit)</li>
+    <li>Tüm OOF prediction'lar Docker image içine bundle'lanmış — sunum sırasında network olmadan çalışır.</li>
+  </ul>
+
+  <h3>Sunum demosu (Rol C sorumluluğunda)</h3>
+  <ol>
+    <li><code>docker-compose up</code> ile başlat</li>
+    <li>Browser'da http://localhost:8000 aç</li>
+    <li>BTC seç, 3-Stage Full seç, Stateful kural seç → <strong>Sharpe 1.15 + equity curve render</strong></li>
+    <li>ETH'e geç, Flat baseline seç → <strong>B&amp;H'ı yener, Sharpe 0.52</strong></li>
+  </ol>
+
+  <div class="callout danger">
+    <strong>KRİTİK UYARI:</strong> Hocaya göre demo çalışmazsa technical score <em>significantly reduced</em>.
+    Sunumdan ÖNCE mutlaka dry-run.
+  </div>
+</section>
+
+<!-- ============================================================
+     11. PAPER KRITERLERI
+============================================================ -->
+<section>
+  <h2><span class="num">11</span>Paper'da Hocanın İstediği Kriterler</h2>
+  <table>
+    <tr><th>Kriter</th><th>Bulunduğu yer</th></tr>
+    <tr><td>Title + 3 yazar</td><td>Page 1 başı</td></tr>
+    <tr><td>Abstract (150-250 kelime, no cite/eq/fig)</td><td>Page 1, 210 kelime</td></tr>
+    <tr><td>Introduction + 10+ academic ref</td><td>Page 1-2, 24 ref</td></tr>
+    <tr><td>Dataset description</td><td>Tablo I</td></tr>
+    <tr><td>Mathematical formulation</td><td>Eq (1)-(4), Section II.B</td></tr>
+    <tr><td>Model description + assumptions</td><td>Section II.E</td></tr>
+    <tr><td>Experimental setup (CV, HP tuning, software, metrics)</td><td>Section III</td></tr>
+    <tr><td>Confusion matrix</td><td>Fig. 4 paper'da (Stage 1 × 8 panel)</td></tr>
+    <tr><td>ROC curves</td><td>Fig. 6 paper'da (Stage 3 × 6 panel)</td></tr>
+    <tr><td>Method comparison</td><td>Tablo II, III, IV</td></tr>
+    <tr><td>Conclusion</td><td>Section VI</td></tr>
+    <tr><td>References (<span class="first-use">IEEE <span class="expansion">(Institute of Electrical and Electronics Engineers — yayın formatı)</span></span> format)</td><td>Page 8</td></tr>
+    <tr><td>Author contributions</td><td>Sayfa 7</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================
+     12. FAQ
+============================================================ -->
+<section id="faq">
+  <h2><span class="num">12</span>Sıkça Beklenen Sorular (FAQ)</h2>
+
+  <h3>S: "Niye sadece XGBoost değil, 4 model birden?"</h3>
+  <p><strong>C:</strong> Pattern recognition coursework açısından farklı algoritma ailelerinin (boosting, bagging, neural net) karşılaştırması bekleniyor.</p>
+
+  <h3>S: "Niye sadece BTC ve ETH? Daha fazla coin niye yok?"</h3>
+  <p><strong>C:</strong> Coursework scope. 2 asset zaten zengin bir karşılaştırma sağlıyor (no-free-lunch bulgusunu çıkardı).</p>
+
+  <h3>S: "Buy &amp; Hold zaten %2972 yapmış, sizin %2901, daha düşük. Niye başarılı?"</h3>
+  <p><strong>C:</strong> Sharpe önemli, total return değil. B&amp;H Sharpe 0.95, biz 1.15. MaxDD bizimki -%46 (B&amp;H -%77). Risk-adjusted return ve drawdown kriptoda total return'den önemli.</p>
+
+  <h3>S: "Stage 2 FSM 'ML' değil. Bu pattern recognition projesi olmuş mu?"</h3>
+  <p><strong>C:</strong> Evet. Stage 1 ve 3 ML, soft fusion mantığı kendisi pattern recognition çekirdek konusu (Jordan &amp; Jacobs hierarchical mixture of experts, 1994). FSM bir özellik mühendisliği tekniği.</p>
+
+  <h3>S: "k=0.5 niye, başka değer denemediniz mi?"</h3>
+  <p><strong>C:</strong> Denedik (k ∈ {0.4, 0.5, 0.7, 1.0}). Tree-based modellerde k=0.5 her ikisi için optimum.</p>
+
+  <h3>S: "ROC-AUC 0.53, chance 0.5. İstatistiksel olarak anlamlı mı?"</h3>
+  <p><strong>C:</strong> AUC'nin chance'tan farkı küçük, McNemar testi yapmadık (paper'da limitation). Ama Sharpe 1.15 vs 0.95 farkı backtest süresi (8.7 yıl) boyunca ekonomik olarak anlamlı.</p>
+
+  <h3>S: "Forward returns kullandın etiket için. Lookahead bias değil mi?"</h3>
+  <p><strong>C:</strong> Etiket ileriye bakar (her supervised time-series probleminde böyle), özellik asla bakmaz. <code>assert_no_lookahead_leakage</code> rutini bunu kod tarafında doğrular.</p>
+</section>
+
+<!-- ============================================================
+     13. SUNUM ÖNCESI CHECKLIST
+============================================================ -->
+<section>
+  <h2><span class="num">13</span>Sunumdan Önce Yapılacaklar</h2>
+  <ul>
+    <li>☐ Docker container build ve demo dry-run (Rol C)</li>
+    <li>☐ Browser'da web UI'nin çalıştığını doğrula</li>
+    <li>☐ BTC ve ETH için Sharpe sayılarının doğru render edildiğini gör</li>
+    <li>☐ <code>docs/paper/paper.pdf</code> son halini PDF olarak yazdır veya tablete kopyala</li>
+    <li>☐ PowerPoint slidedeck (10 slide max):
+      <ol>
+        <li>Problem (Rol A)</li>
+        <li>Hierarchical decomposition (mimari diyagram) (Rol A → B geçiş)</li>
+        <li>Stage 1 — ZigZag + 4 model (Rol A)</li>
+        <li>Stage 2 — FSM (Rol B)</li>
+        <li>Stage 3 — Soft fusion + 16 boyutlu vektör (Rol B)</li>
+        <li>Walk-forward CV (Rol C)</li>
+        <li>Architecture ablation <strong>(en kritik slide)</strong> (Rol C)</li>
+        <li>Trading rules + Sharpe 1.15 vs 0.95 (Rol C)</li>
+        <li>Asset-specific finding (BTC vs ETH) (Rol C)</li>
+        <li>Demo screen + thank you (Rol C)</li>
+      </ol>
+    </li>
+  </ul>
+</section>
+
+<footer style="margin-top:60px; padding-top:24px; border-top:1px solid var(--border); color:var(--text-dim); font-size:0.85em; text-align:center;">
+  <p>Tüm kısaltmaların listesini sağ alttaki <strong>📖 Sözlük</strong> butonu her an açar.</p>
+  <p>Hızlı tarayıcı: <code>open docs/EKIP_BRIEF.html</code></p>
+</footer>
+
+</main>
+
+<!-- ============================================================
+     FLOATING GLOSSARY
+============================================================ -->
+<button id="glossary-btn" onclick="toggleGlossary()">📖 Sözlük</button>
+<aside id="glossary-panel">
+  <header>
+    <strong>Kısaltmalar Sözlüğü</strong>
+    <button class="close-x" onclick="toggleGlossary()" aria-label="Kapat">×</button>
+  </header>
+  <input type="text" id="glossary-search" placeholder="Ara… (örn: VIX, FSM, Sharpe)" oninput="filterGlossary()">
+  <div id="glossary-list"></div>
+</aside>
+
+<script>
+  // === Glossary data ===
+  const GLOSSARY = [
+    ["BTC / ETH", "Bitcoin / Ethereum — projedeki iki kripto varlık"],
+    ["OHLCV", "Open / High / Low / Close / Volume — günlük fiyat barı"],
+    ["FRED", "Federal Reserve Economic Data — ABD merkez bankası açık veri portalı"],
+    ["VIX", "Volatility Index — S&P 500 opsiyonlarından türetilen 'korku endeksi'"],
+    ["DXY", "US Dollar Index — doların 6 büyük para birimine karşı sepeti"],
+    ["US10Y / US2Y", "10 / 2 yıllık ABD devlet tahvili faizi"],
+    ["FedFunds", "Federal Funds Rate — ABD politika faizi"],
+    ["CPI", "Consumer Price Index — tüketici enflasyon endeksi"],
+    ["M2", "Geniş para arzı (nakit + vadeli mevduat)"],
+    ["YoY", "Year-over-Year — yıllık % değişim"],
+    ["z-score", "(değer − ortalama) / standart sapma — 'kaç sigma uzakta'"],
+    ["RSI", "Relative Strength Index — 14-gün momentum osilatörü"],
+    ["MACD", "Moving Average Convergence Divergence — trend göstergesi"],
+    ["ADX", "Average Directional Index — trend gücü ölçüsü"],
+    ["BB %B", "Bollinger Bands %B — fiyatın band içi konumu"],
+    ["ATR", "Average True Range — volatilite ölçüsü"],
+    ["OBV", "On-Balance Volume — kümülatif yön-ağırlıklı hacim"],
+    ["FSM", "Finite State Machine — kuralcı durum makinesi"],
+    ["HMM", "Hidden Markov Model — gizli durumlu olasılıksal model"],
+    ["GMM", "Gaussian Mixture Model — kümeleme algoritması"],
+    ["GFC", "Global Financial Crisis (2008)"],
+    ["CV", "Cross-Validation — modeli ayrı veri parçalarında doğrulama"],
+    ["HP", "Hyperparameter — modelin eğitim öncesi ayar değerleri"],
+    ["F1m", "Macro-averaged F1 score — sınıflar arası dengeli F1"],
+    ["AUC", "Area Under (ROC) Curve — sıralama kalitesi (0.5 chance, 1.0 mükemmel)"],
+    ["ROC", "Receiver Operating Characteristic — TPR vs FPR eğrisi"],
+    ["Sharpe", "Sharpe Ratio — risk-adjusted yıllık getiri (>1 iyi, >2 mükemmel)"],
+    ["MaxDD", "Maximum Drawdown — en büyük tepe-dip kaybı"],
+    ["B&H", "Buy & Hold — pasif benchmark"],
+    ["OOF", "Out-of-Fold — CV validation tahminleri"],
+    ["MI", "Mutual Information — feature × target ilişki ölçüsü"],
+    ["LDA", "Linear Discriminant Analysis"],
+    ["MLP", "Multi-Layer Perceptron — yapay sinir ağı"],
+    ["XGB / XGBoost", "Gradient-boosted decision trees, regülerizasyonlu"],
+    ["LGBM / LightGBM", "Microsoft'un leaf-wise boosted trees, hızlı"],
+    ["RF", "Random Forest — bagging ile birleştirilen karar ağaçları"],
+    ["SMA", "Simple Moving Average"],
+    ["API", "Application Programming Interface"],
+    ["FastAPI", "Modern Python web framework, async + type-hint"],
+    ["HTTP", "HyperText Transfer Protocol — web istek-cevap"],
+    ["HTML / CSS / JS", "Web sayfası dili / stil / etkileşim"],
+    ["IEEE", "Institute of Electrical and Electronics Engineers — yayın formatı"],
+    ["TikZ", "LaTeX vektör grafik paketi"],
+    ["Optuna", "Bayesian hyperparameter optimization kütüphanesi"],
+    ["Lookahead bias", "Modelin tahmin sırasında geleceği görmesi durumu — yasak"],
+    ["Soft fusion", "Hard label yerine olasılık vektörü taşımak"],
+    ["Walk-forward CV", "Zaman-sıralı doğrulama; train hep test'ten önce"],
+    ["Posterior", "Veriye bakıldıktan sonra hesaplanan sınıf olasılığı"],
+  ];
+
+  function renderGlossary(filter = "") {
+    const list = document.getElementById("glossary-list");
+    const f = filter.toLowerCase().trim();
+    list.innerHTML = GLOSSARY
+      .filter(([k, v]) => !f || k.toLowerCase().includes(f) || v.toLowerCase().includes(f))
+      .map(([k, v]) => `<div class="row"><span class="key">${k}</span><span class="val">${v}</span></div>`)
+      .join("") || `<div class="row"><span class="val">Eşleşme yok.</span></div>`;
+  }
+  function toggleGlossary() {
+    const panel = document.getElementById("glossary-panel");
+    panel.classList.toggle("open");
+    if (panel.classList.contains("open")) {
+      renderGlossary();
+      document.getElementById("glossary-search").focus();
+    }
+  }
+  function filterGlossary() {
+    renderGlossary(document.getElementById("glossary-search").value);
+  }
+
+  // === Tooltip click-to-show on mobile ===
+  document.querySelectorAll('.term').forEach(el => {
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelectorAll('.term.tapped').forEach(t => { if (t !== el) t.classList.remove('tapped'); });
+      el.classList.toggle('tapped');
+    });
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.classList.contains('term') && !e.target.closest('#glossary-panel') && e.target.id !== 'glossary-btn') {
+      document.querySelectorAll('.term.tapped').forEach(t => t.classList.remove('tapped'));
+    }
+  });
+
+  // Pre-render glossary
+  renderGlossary();
+</script>
+
+</body>
+</html>
