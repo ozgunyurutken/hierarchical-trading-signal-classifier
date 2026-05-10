@@ -235,10 +235,13 @@ select, input { font-family: inherit; }
 .race { grid-column: span 12; }
 .race-chart {
   width: 100%;
-  height: 240px;
+  height: 150px;
   background: var(--bg-0);
   border-radius: 4px;
   display: block;
+  /* Isolate layout/paint so scroll on the rest of the page doesn't trigger
+     ResizeObserver-driven re-renders inside the chart canvas. */
+  contain: layout paint style;
 }
 .legend-pill.race-strat {
   color: var(--buy);
@@ -276,7 +279,7 @@ select, input { font-family: inherit; }
 }
 
 @media (max-width: 800px) {
-  .race-chart { height: 180px; }
+  .race-chart { height: 120px; }
 }
 
 /* ─────────────── SCRUBBER ─────────────── */

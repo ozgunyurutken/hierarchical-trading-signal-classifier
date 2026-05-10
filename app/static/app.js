@@ -435,10 +435,17 @@ function buildRaceChart() {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
+      // Skip Chart.js's expensive parsing — we feed parallel arrays.
+      normalized: true,
+      // Reduce hit-test work during play / scroll
       interaction: { mode: "index", intersect: false },
+      // Resize debouncing: the canvas's ResizeObserver fires on every page
+      // scroll because LightweightCharts above can change layout. 250ms
+      // debounce eliminates jank without harming perceived responsiveness.
+      resizeDelay: 250,
       scales: {
         x: {
-          ticks:   { color: "#6b7895", maxTicksLimit: 8, font: { family: "JetBrains Mono", size: 10 } },
+          ticks:   { color: "#6b7895", maxTicksLimit: 6, autoSkip: true, font: { family: "JetBrains Mono", size: 10 } },
           grid:    { color: "rgba(120,144,184,0.10)" },
           border:  { color: "rgba(120,144,184,0.25)" },
         },
@@ -446,6 +453,7 @@ function buildRaceChart() {
           ticks: {
             color: "#6b7895",
             font: { family: "JetBrains Mono", size: 10 },
+            maxTicksLimit: 5,
             callback: (v) => (v >= 0 ? "+" : "") + v.toFixed(0) + "%",
           },
           grid:   { color: "rgba(120,144,184,0.10)" },
@@ -453,15 +461,15 @@ function buildRaceChart() {
         },
       },
       plugins: {
-        legend: {
-          position: "top",
-          align: "end",
-          labels: {
-            color: "#b3bfd6",
-            font: { family: "Inter", size: 11, weight: "500" },
-            boxWidth: 18, boxHeight: 2,
-          },
+        // min-max decimation: when the dataset has more samples than fit in
+        // pixels (typical: 1000+ pts on a 800-px canvas), Chart.js downsamples
+        // to extrema only — visually identical, ~10× faster.
+        decimation: {
+          enabled: true,
+          algorithm: "min-max",
         },
+        // Header pills already show Strategy/B&H labels with live deltas.
+        legend: { display: false },
         tooltip: {
           backgroundColor: "rgba(6, 9, 15, 0.95)",
           borderColor: "rgba(120, 144, 184, 0.30)",
