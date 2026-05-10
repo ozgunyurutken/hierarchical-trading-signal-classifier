@@ -3,107 +3,257 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>V5 Hierarchical Crypto Signal Classifier</title>
+  <title>V5 Hierarchical Crypto Signal — Live Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <header>
-    <h1>V5 Hierarchical Trading Signal Classifier</h1>
-    <p class="subtitle">
-      Three-stage soft-fusion: <b>Stage 1</b> (Trend) → <b>Stage 2</b> (Macro Regime) → <b>Stage 3</b> (Buy/Sell/Hold)
-    </p>
-    <p class="course">BBL514E Pattern Recognition · Yurutken (707251003) &amp; Bilgin (504251013) · Spring 2026</p>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo">⚡</span>
+      <span class="brand-name">V5</span>
+      <span class="brand-tag">HIERARCHICAL · CRYPTO · LIVE</span>
+    </div>
+
+    <div class="ticker">
+      <button class="asset-btn active" data-asset="BTC">
+        <span class="ticker-sym">BTC</span>
+        <span class="ticker-px" id="tickerPxBTC">—</span>
+      </button>
+      <button class="asset-btn" data-asset="ETH">
+        <span class="ticker-sym">ETH</span>
+        <span class="ticker-px" id="tickerPxETH">—</span>
+      </button>
+    </div>
+
+    <div class="config">
+      <label class="config-item">
+        <span>ARCH</span>
+        <select id="arch">
+          <option value="default" selected>auto · best</option>
+          <option value="flat">flat · 6 osc</option>
+          <option value="2stage_trend">2-stage trend</option>
+          <option value="2stage_macro">2-stage macro</option>
+          <option value="3stage_full">3-stage full · 16</option>
+        </select>
+      </label>
+      <label class="config-item">
+        <span>MODEL</span>
+        <select id="model">
+          <option value="default" selected>auto</option>
+          <option value="xgboost">XGBoost</option>
+          <option value="lightgbm">LightGBM</option>
+          <option value="random_forest">Random Forest</option>
+          <option value="mlp">MLP</option>
+        </select>
+      </label>
+      <label class="config-item">
+        <span>RULE</span>
+        <select id="rule">
+          <option value="default" selected>auto</option>
+          <option value="stateful">stateful</option>
+          <option value="defensive">defensive</option>
+          <option value="prob_weighted">prob-weighted</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="status">
+      <span class="led led-on" id="led"></span>
+      <span class="status-label" id="statusLabel">LIVE OOF</span>
+      <span class="status-date" id="statusDate">—</span>
+    </div>
   </header>
 
-  <main>
-    <section class="card">
-      <h2>Predict</h2>
-      <div class="row">
-        <div class="field">
-          <label for="asset">Asset</label>
-          <select id="asset"></select>
-        </div>
-        <div class="field">
-          <label for="date">Date</label>
-          <select id="date"></select>
-        </div>
-        <div class="field">
-          <label for="arch">Architecture</label>
-          <select id="arch">
-            <option value="default" selected>default (best per asset)</option>
-            <option value="flat">flat (6 osc only)</option>
-            <option value="2stage_trend">2-Stage Trend (+ S1)</option>
-            <option value="2stage_macro">2-Stage Macro (+ S2)</option>
-            <option value="3stage_full">3-Stage Full (16 feat)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="model">Model</label>
-          <select id="model">
-            <option value="default" selected>default</option>
-            <option value="xgboost">XGBoost</option>
-            <option value="lightgbm">LightGBM</option>
-            <option value="random_forest">Random Forest</option>
-            <option value="mlp">MLP</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="rule">Trading Rule</label>
-          <select id="rule">
-            <option value="default" selected>default</option>
-            <option value="stateful">Stateful (Buy=in, Sell=out, Hold=stay)</option>
-            <option value="defensive">Defensive (Buy=in, else=cash)</option>
-            <option value="prob_weighted">Prob-weighted (size = P_Buy − P_Sell)</option>
-          </select>
-        </div>
-        <div class="field">
-          <button id="predictBtn">Predict</button>
+  <main class="grid">
+
+    <!-- HERO CHART -->
+    <section class="panel hero">
+      <div class="panel-header">
+        <h2>PRICE × REGIME × SIGNALS</h2>
+        <div class="panel-subtitle">
+          <span class="legend-pill regime-bull">● Risk-On</span>
+          <span class="legend-pill regime-neutral">● Neutral</span>
+          <span class="legend-pill regime-bear">● Risk-Off</span>
+          <span class="legend-pill marker-buy">▲ Buy</span>
+          <span class="legend-pill marker-sell">▼ Sell</span>
         </div>
       </div>
+      <div id="heroChart" class="hero-chart"></div>
+    </section>
 
-      <div id="result" class="hidden">
-        <div class="signal-block" id="signalBlock">
-          <span class="signal-label" id="signalLabel">—</span>
-          <span class="signal-confidence" id="signalConfidence">—</span>
+    <!-- TIMELINE SCRUBBER -->
+    <section class="panel scrubber">
+      <div class="scrubber-row">
+        <div class="play-controls">
+          <button class="play-btn" id="playBtn" title="Play / pause">▶</button>
+          <div class="speed-group">
+            <button class="speed-btn active" data-speed="1">1×</button>
+            <button class="speed-btn" data-speed="3">3×</button>
+            <button class="speed-btn" data-speed="6">6×</button>
+          </div>
+          <button class="reset-btn" id="resetBtn" title="Reset to latest">⟲</button>
         </div>
-        <div class="probs-row">
-          <div class="prob-bar"><div class="prob-fill buy"  id="pBuyFill"></div><span>Buy: <b id="pBuy">—</b></span></div>
-          <div class="prob-bar"><div class="prob-fill hold" id="pHoldFill"></div><span>Hold: <b id="pHold">—</b></span></div>
-          <div class="prob-bar"><div class="prob-fill sell" id="pSellFill"></div><span>Sell: <b id="pSell">—</b></span></div>
-        </div>
-        <div class="meta-row">
-          <div class="meta">Price: <b id="price">—</b></div>
-          <div class="meta">Stage 2 regime: <b id="s2regime">—</b></div>
-          <div class="meta">Stage 1 trend (best): <b id="s1trend">—</b></div>
-          <div class="meta">Forward 5d return: <b id="fwd">—</b></div>
+
+        <div class="scrubber-track-wrap">
+          <canvas id="miniEquity" class="mini-equity"></canvas>
+          <input type="range" id="scrubber" class="scrubber-input"
+                 min="0" max="100" value="100" step="1" />
+          <div class="scrubber-labels">
+            <span id="scrubFirst">—</span>
+            <span id="scrubMid">—</span>
+            <span id="scrubLast">—</span>
+          </div>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Trade Timeline — selected configuration</h2>
-      <p class="explainer">
-        <b>Top:</b> price (log) with Buy entries (▲ green) and Sell exits (▼ red) for the chosen rule.
-        Selected date is highlighted in orange.
-        <b>Bottom:</b> cumulative equity (strategy vs Buy &amp; Hold).
-      </p>
-      <div id="tradeStats" class="trade-stats"></div>
-      <canvas id="priceChart"></canvas>
-      <canvas id="equityChart" style="margin-top: 8px;"></canvas>
-      <div id="equityLabel" class="explainer"></div>
+    <!-- DECISION ROW -->
+    <section class="panel signal-card">
+      <div class="panel-header"><h2>SIGNAL</h2></div>
+      <div class="signal-body">
+        <div class="signal-label" id="signalLabel">—</div>
+        <div class="signal-conf">
+          <span class="conf-num" id="signalConf">—</span>
+          <span class="conf-tag">confidence</span>
+        </div>
+        <div class="probs">
+          <div class="prob"><span class="prob-name">Buy</span>
+            <div class="prob-track"><div class="prob-fill prob-buy" id="pBuyFill"></div></div>
+            <span class="prob-val" id="pBuy">—</span>
+          </div>
+          <div class="prob"><span class="prob-name">Hold</span>
+            <div class="prob-track"><div class="prob-fill prob-hold" id="pHoldFill"></div></div>
+            <span class="prob-val" id="pHold">—</span>
+          </div>
+          <div class="prob"><span class="prob-name">Sell</span>
+            <div class="prob-track"><div class="prob-fill prob-sell" id="pSellFill"></div></div>
+            <span class="prob-val" id="pSell">—</span>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="card small">
-      <h2>System Info</h2>
-      <pre id="health"></pre>
+    <section class="panel gauge-card">
+      <div class="panel-header"><h2>STAGE 1 · TREND</h2></div>
+      <div class="gauge-body">
+        <svg id="gaugeS1" class="gauge" viewBox="0 0 120 70"></svg>
+        <div class="gauge-meta">
+          <div class="gauge-class" id="s1Class">—</div>
+          <div class="gauge-row"><span>Up</span><b id="s1Up">—</b></div>
+          <div class="gauge-row"><span>Range</span><b id="s1Range">—</b></div>
+          <div class="gauge-row"><span>Down</span><b id="s1Down">—</b></div>
+        </div>
+      </div>
     </section>
+
+    <section class="panel gauge-card">
+      <div class="panel-header"><h2>STAGE 2 · REGIME</h2></div>
+      <div class="gauge-body">
+        <div class="regime-orb" id="regimeOrb">
+          <div class="orb-ring"></div>
+          <div class="orb-label" id="regimeLabel">—</div>
+        </div>
+        <div class="gauge-meta">
+          <div class="gauge-row"><span>Bull</span><b id="s2Bull">—</b></div>
+          <div class="gauge-row"><span>Neutral</span><b id="s2Neut">—</b></div>
+          <div class="gauge-row"><span>Bear</span><b id="s2Bear">—</b></div>
+          <div class="gauge-row sub"><span>regime age</span><b id="s2Age">—</b></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel votes-card">
+      <div class="panel-header">
+        <h2>MODEL VOTES</h2>
+        <div class="panel-subtitle"><span id="votesAgg">—</span></div>
+      </div>
+      <div class="votes-body" id="votesBody">
+        <!-- 4 rows injected: XGB, LGBM, RF, MLP -->
+      </div>
+    </section>
+
+    <!-- WHY + WHAT -->
+    <section class="panel reasons-card">
+      <div class="panel-header"><h2>WHY THIS SIGNAL</h2></div>
+      <ul class="reasons" id="reasonsList"></ul>
+    </section>
+
+    <section class="panel outcome-card">
+      <div class="panel-header"><h2>WHAT HAPPENED</h2></div>
+      <div class="outcome-grid">
+        <div class="outcome-cell" id="oc5"><label>5 days</label><b>—</b></div>
+        <div class="outcome-cell" id="oc10"><label>10 days</label><b>—</b></div>
+        <div class="outcome-cell" id="oc30"><label>30 days</label><b>—</b></div>
+      </div>
+      <div class="trade-sim" id="tradeSim">—</div>
+    </section>
+
+    <!-- ABLATION HEATMAP -->
+    <section class="panel heatmap-card">
+      <div class="panel-header">
+        <h2>ABLATION · SHARPE</h2>
+        <div class="panel-subtitle">click cell to activate that combo</div>
+      </div>
+      <div id="heatmap" class="heatmap"></div>
+    </section>
+
   </main>
 
-  <footer>
-    <small>V5 backend serves walk-forward OOF predictions deterministically. No on-the-fly inference.</small>
+  <!-- WHAT-IF LAB DRAWER (toggle) -->
+  <button id="labToggle" class="lab-toggle">🧪 WHAT-IF LAB</button>
+  <aside id="labDrawer" class="lab-drawer hidden">
+    <div class="lab-header">
+      <h2>WHAT-IF LAB</h2>
+      <button id="labClose" class="lab-close">×</button>
+    </div>
+    <div class="lab-mode">
+      <button class="lab-mode-btn active" data-mode="actual">Actual</button>
+      <button class="lab-mode-btn" data-mode="custom">Custom</button>
+    </div>
+    <div class="lab-body" id="labBody">
+      <p class="lab-hint">Drag any slider — model re-runs in real time. Disclaimer: what-if uses a final-fit model trained on all data; backtest curves above remain walk-forward OOF.</p>
+      <!-- slider groups injected -->
+    </div>
+    <div class="lab-output">
+      <div class="lab-out-header">LIVE PREDICTION</div>
+      <div class="lab-signal-row">
+        <span class="lab-signal-from" id="labFrom">—</span>
+        <span class="lab-signal-arrow">→</span>
+        <span class="lab-signal-to" id="labTo">—</span>
+      </div>
+      <div class="lab-conf-delta" id="labConfDelta">—</div>
+      <div class="lab-bars">
+        <div class="lab-bar"><span>Buy</span>
+          <div class="lab-bar-track"><div class="lab-bar-fill prob-buy" id="labBuy"></div></div>
+          <b id="labBuyVal">—</b>
+        </div>
+        <div class="lab-bar"><span>Hold</span>
+          <div class="lab-bar-track"><div class="lab-bar-fill prob-hold" id="labHold"></div></div>
+          <b id="labHoldVal">—</b>
+        </div>
+        <div class="lab-bar"><span>Sell</span>
+          <div class="lab-bar-track"><div class="lab-bar-fill prob-sell" id="labSell"></div></div>
+          <b id="labSellVal">—</b>
+        </div>
+      </div>
+      <div class="lab-actions">
+        <button id="labReset" class="lab-action">↺ Reset</button>
+        <button id="labRandom" class="lab-action">🎲 Random</button>
+      </div>
+    </div>
+  </aside>
+
+  <footer class="footer">
+    <span>BBL514E Pattern Recognition · Yurutken (707251003) &amp; Bilgin (504251013) · Spring 2026</span>
+    <span class="footer-meta" id="footerMeta">—</span>
   </footer>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js" type="module"></script>
 </body>
 </html>

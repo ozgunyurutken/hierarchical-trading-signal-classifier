@@ -15,12 +15,13 @@ build/
 # Data (raw is large, keep processed for reproducibility)
 data/raw/
 
-# Model artifacts
+# Model artifacts (default ignore, but V5 What-If bundles are committed for Docker demo)
 *.joblib
 *.pkl
 *.pt
 *.pth
 app/models/*.joblib
+!app/models/v5/*.joblib
 
 # Environment
 .env
@@ -51,3 +52,19 @@ docker/.env
 # Optuna study storage (generated, regenerable from scripts/v5_tune_stage1.py)
 optuna_v5.db
 optuna_v5.db-journal
+
+# LaTeX auxiliary files (only commit .tex / .bib / .pdf)
+*.aux
+*.bbl
+*.blg
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Large eski feature snapshot (15MB, not used by V5 pipeline)
+data/processed/btc_features_all.csv
+
+# Pre-overnight screenshots (paper figure source images live in docs/paper/figures/)
+Screenshot*.png
