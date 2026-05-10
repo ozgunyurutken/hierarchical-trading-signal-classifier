@@ -995,7 +995,8 @@ y_t = Hold  diğer durumda</code></pre>
       <text x="375" y="129" text-anchor="middle" fill="#000" font-size="10" font-weight="700">💵 NAKİT</text>
       <rect x="430" y="80"  width="60"  height="20" fill="#81c784" opacity="0.7"/>
       <text x="460" y="94" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG</text>
-      <text x="540" y="105" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">2 trade</strong> (Sell'de çık, Buy'da gir)</text>
+      <text x="540" y="98" fill="#fff" font-size="10" font-weight="700">→ Hold = pozisyonu KORU</text>
+      <text x="540" y="112" fill="#a4b1c2" font-size="10">inert; az trade, az fee</text>
 
       <!-- Rule 2: Defensive Reset -->
       <text x="40" y="170" fill="#ba68c8" font-size="11" font-weight="700">Defensive</text>
@@ -1007,7 +1008,8 @@ y_t = Hold  diğer durumda</code></pre>
       <text x="320" y="207" text-anchor="middle" fill="#000" font-size="10" font-weight="700">💵 NAKİT (Hold dahil!)</text>
       <rect x="430" y="158" width="60" height="20" fill="#81c784" opacity="0.7"/>
       <text x="460" y="172" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG</text>
-      <text x="540" y="183" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">4 trade</strong> (Hold = nakit, çok savunmacı)</text>
+      <text x="540" y="176" fill="#fff" font-size="10" font-weight="700">→ Hold = NAKİTE GEÇ</text>
+      <text x="540" y="190" fill="#a4b1c2" font-size="10">paranoid; sık trade, yüksek fee</text>
 
       <!-- Rule 3: Probability-Weighted -->
       <text x="40" y="248" fill="#ffb74d" font-size="11" font-weight="700">Probability</text>
@@ -1030,7 +1032,8 @@ y_t = Hold  diğer durumda</code></pre>
         <rect x="430" y="246" width="50" height="14" fill="#81c784" opacity="0.6"/>
         <text x="455" y="257" text-anchor="middle" fill="#000" font-size="9" font-weight="700">60%</text>
       </g>
-      <text x="540" y="261" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">7 küçük ayar</strong> (clip(P_Buy − P_Sell, 0, 1))</text>
+      <text x="540" y="254" fill="#fff" font-size="10" font-weight="700">→ Pozisyon = clip(P_Buy − P_Sell)</text>
+      <text x="540" y="268" fill="#a4b1c2" font-size="10">sürekli; her gün küçük büyüklük ayarı</text>
     </svg>
     <div class="caption"><strong>Şekil 12.</strong> 3 trading kuralı aynı tahmin sekansına nasıl tepki verir. Stateful = inertial, defensive = paranoid, probability-weighted = sürekli.</div>
   </div>
