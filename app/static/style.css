@@ -222,19 +222,114 @@ select, input { font-family: inherit; }
 
 /* ─────────────── HERO CHART ─────────────── */
 
-/* Hero row: 8/4 split with stacked side panels */
+/* Hero row layout
+   ┌──┬─────────────┬─────────────────┬──────────┐
+   │ ◀│ left-stack  │      HERO       │ right-   │
+   │bar│ (collapse)  │     chart       │ stack    │
+   └──┴─────────────┴─────────────────┴──────────┘
+   left-stack default = collapsed (width 0). Click bar to expand. */
 .hero-row {
   grid-column: span 12;
-  display: grid;
-  grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+  display: flex;
   gap: var(--gap, 14px);
   align-items: stretch;
 }
-.hero-row .hero { min-width: 0; margin: 0; }
+.hero-row .hero { flex: 1 1 auto; min-width: 0; margin: 0; }
+
+/* ─ Vertical collapse bar that toggles the left-stack ─ */
+.left-toggle {
+  flex: 0 0 auto;
+  width: 30px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--txt-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 0;
+  font-family: var(--mono);
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+.left-toggle:hover { background: var(--bg-2); color: var(--accent); border-color: var(--accent-dim); }
+.left-toggle-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  font-weight: 600;
+}
+.left-toggle-caret {
+  font-size: 14px;
+  transition: transform 0.25s ease;
+}
+.hero-row.left-open .left-toggle-caret { transform: rotate(180deg); }
+.hero-row.left-open .left-toggle      { color: var(--accent); border-color: var(--accent-dim); }
+
+/* ─ Left-stack (Stage 1 / Stage 2 / Votes) ─ */
+.left-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap, 14px);
+  width: 240px;
+  min-width: 0;
+  flex: 0 0 auto;
+  overflow: hidden;
+  transition: width 0.32s cubic-bezier(.22, 1, .36, 1),
+              opacity 0.22s,
+              margin 0.32s cubic-bezier(.22, 1, .36, 1);
+  opacity: 1;
+}
+.left-stack.collapsed {
+  width: 0;
+  margin-left: calc(-1 * var(--gap, 14px));   /* eat the flex gap */
+  opacity: 0;
+  pointer-events: none;
+}
+.left-stack > .panel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+.left-stack > .panel .panel-header { flex: 0 0 auto; margin-bottom: 6px; }
+.left-stack > .panel .panel-header h2 { font-size: 10px; }
+.left-stack > .panel .gauge-body,
+.left-stack > .panel .votes-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+/* Compact gauge / regime / votes inside the left column */
+.left-stack .gauge-body { gap: 8px; }
+.left-stack .gauge { max-height: 56px; }
+.left-stack .gauge-meta { gap: 2px; }
+.left-stack .gauge-class { font-size: 11px; padding: 2px 0; margin-bottom: 2px; }
+.left-stack .gauge-row { font-size: 10px; }
+.left-stack .gauge-row.sub { font-size: 9px; padding-top: 2px; margin-top: 2px; }
+
+.left-stack .regime-orb { width: 56px; height: 56px; }
+.left-stack .orb-ring { border-width: 2px; box-shadow: inset 0 0 14px currentColor, 0 0 18px currentColor; }
+.left-stack .orb-label { font-size: 9px; letter-spacing: 0.06em; }
+
+.left-stack .votes-body { gap: 4px; }
+.left-stack .vote-row {
+  grid-template-columns: 38px 1fr 44px;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 10px;
+}
+.left-stack .vote-bar { height: 10px; }
+.left-stack .vote-name { letter-spacing: 0.02em; }
+
+/* ─ Right-stack (Signal + Why this signal) ─ */
 .right-stack {
   display: flex;
   flex-direction: column;
   gap: var(--gap, 14px);
+  flex: 0 0 290px;        /* fixed width, ~290px */
   min-width: 0;
 }
 .right-stack > .panel {
@@ -242,35 +337,18 @@ select, input { font-family: inherit; }
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 10px 12px;     /* tighter than default 16px */
   overflow: hidden;
 }
-.right-stack > .panel .panel-header { flex: 0 0 auto; margin-bottom: 6px; }
-.right-stack > .panel .panel-header h2 { font-size: 10px; }
-.right-stack > .panel .gauge-body,
-.right-stack > .panel .votes-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-
-/* Compact gauge / regime / votes inside the right column */
-.right-stack .gauge-body { gap: 8px; }
-.right-stack .gauge { max-height: 56px; }
-.right-stack .gauge-meta { gap: 2px; }
-.right-stack .gauge-class { font-size: 11px; padding: 2px 0; margin-bottom: 2px; }
-.right-stack .gauge-row { font-size: 10px; }
-.right-stack .gauge-row.sub { font-size: 9px; padding-top: 2px; margin-top: 2px; }
-
-.right-stack .regime-orb { width: 56px; height: 56px; }
-.right-stack .orb-ring { border-width: 2px; box-shadow: inset 0 0 14px currentColor, 0 0 18px currentColor; }
-.right-stack .orb-label { font-size: 9px; letter-spacing: 0.06em; }
-
-.right-stack .votes-body { gap: 4px; }
-.right-stack .vote-row {
-  grid-template-columns: 38px 1fr 44px;
-  gap: 6px;
-  padding: 3px 6px;
-  font-size: 10px;
-}
-.right-stack .vote-bar { height: 10px; }
-.right-stack .vote-name { letter-spacing: 0.02em; }
+.right-stack > .panel .panel-header { flex: 0 0 auto; }
+.right-stack > .panel .signal-body,
+.right-stack > .panel .reasons      { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* Compact signal panel inside the right-stack to fit the hero height */
+.right-stack .signal-label { font-size: 28px; padding: 8px 0 6px 0; }
+.right-stack .conf-num     { font-size: 14px; }
+.right-stack .signal-conf  { padding-bottom: 4px; }
+.right-stack .probs        { gap: 4px; }
+.right-stack .prob         { font-size: 10px; grid-template-columns: 32px 1fr 40px; }
+.right-stack .prob-track   { height: 5px; }
 
 .hero-chart {
   width: 100%;
@@ -1101,16 +1179,18 @@ select, input { font-family: inherit; }
   .reasons-card { grid-column: span 6; }
   .outcome-card { grid-column: span 6; }
 }
-@media (max-width: 1100px) {
-  .hero-row { grid-template-columns: 1fr; }
-  .right-stack { flex-direction: row; }
-  .right-stack > .panel { flex: 1; }
+@media (max-width: 1280px) {
+  .hero-row { flex-wrap: wrap; }
+  .right-stack { flex: 1 1 100%; flex-direction: row; min-width: 0; }
+  .right-stack > .panel { flex: 1 1 0; }
 }
 @media (max-width: 800px) {
   .topbar { flex-wrap: wrap; gap: 12px; }
   .config { margin-left: 0; }
-  .right-stack { flex-direction: column; }
+  .right-stack { flex-direction: column; flex: 1 1 100%; }
   .right-stack > .panel { flex: 1 1 auto; }
+  .left-stack { flex: 1 1 100%; flex-direction: row; }
+  .left-stack > .panel { flex: 1 1 0; }
   .reasons-card, .outcome-card, .signal-card { grid-column: span 12; }
   .lab-drawer { width: 100vw; }
   .hero-chart { height: 280px; }

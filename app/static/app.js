@@ -110,6 +110,17 @@ async function init() {
   $("heatmapHeader").addEventListener("click", () => {
     $("heatmapPanel").classList.toggle("collapsed");
   });
+
+  // Left-stack collapse bar (Stage1/Stage2/Votes panels slide in from the
+  // left of the hero chart).
+  $("leftToggle").addEventListener("click", () => {
+    const row   = $("heroRow");
+    const stack = $("leftStack");
+    const open  = stack.classList.toggle("collapsed");  // returns NEW state
+    // .collapsed present  → collapsed (closed)
+    // .collapsed absent   → expanded (open)
+    row.classList.toggle("left-open", !open);
+  });
   document.querySelectorAll(".lab-mode-btn").forEach(b =>
     b.addEventListener("click", () => setLabMode(b.dataset.mode)));
   $("labReset").addEventListener("click", labResetToActual);

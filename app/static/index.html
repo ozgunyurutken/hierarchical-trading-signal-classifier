@@ -72,26 +72,17 @@
 
   <main class="grid">
 
-    <!-- HERO ROW: chart left (8/12), Stage1/Stage2/Votes stacked right (4/12) -->
-    <div class="hero-row">
-      <section class="panel hero">
-        <div class="panel-header">
-          <h2>PRICE × REGIME × SIGNALS</h2>
-          <div class="panel-subtitle">
-            <span class="legend-pill regime-bull">● Risk-On</span>
-            <span class="legend-pill regime-neutral">● Neutral</span>
-            <span class="legend-pill regime-bear">● Risk-Off</span>
-            <span class="legend-pill marker-buy">▲ Buy</span>
-            <span class="legend-pill marker-sell">▼ Sell</span>
-          </div>
-        </div>
-        <div id="heroChart" class="hero-chart">
-          <div id="heroVLine" class="hero-vline"></div>
-          <div id="heroTooltip" class="hero-tooltip"></div>
-        </div>
-      </section>
+    <!-- HERO ROW
+         [▶|◀ collapse bar] [left-stack: S1 / S2 / VOTES, hidden by default]
+         [HERO chart] [right-stack: SIGNAL / WHY THIS SIGNAL] -->
+    <div class="hero-row" id="heroRow">
+      <button class="left-toggle" id="leftToggle"
+              title="Show / hide stages panel">
+        <span class="left-toggle-label">STAGES</span>
+        <span class="left-toggle-caret" id="leftToggleCaret">▸</span>
+      </button>
 
-      <div class="right-stack">
+      <div class="left-stack collapsed" id="leftStack">
         <section class="panel gauge-card">
           <div class="panel-header"><h2>STAGE 1 · TREND</h2></div>
           <div class="gauge-body">
@@ -129,6 +120,55 @@
           <div class="votes-body" id="votesBody">
             <!-- 4 rows injected: XGB, LGBM, RF, MLP -->
           </div>
+        </section>
+      </div>
+
+      <section class="panel hero">
+        <div class="panel-header">
+          <h2>PRICE × REGIME × SIGNALS</h2>
+          <div class="panel-subtitle">
+            <span class="legend-pill regime-bull">● Risk-On</span>
+            <span class="legend-pill regime-neutral">● Neutral</span>
+            <span class="legend-pill regime-bear">● Risk-Off</span>
+            <span class="legend-pill marker-buy">▲ Buy</span>
+            <span class="legend-pill marker-sell">▼ Sell</span>
+          </div>
+        </div>
+        <div id="heroChart" class="hero-chart">
+          <div id="heroVLine" class="hero-vline"></div>
+          <div id="heroTooltip" class="hero-tooltip"></div>
+        </div>
+      </section>
+
+      <div class="right-stack">
+        <section class="panel signal-card">
+          <div class="panel-header"><h2>SIGNAL</h2></div>
+          <div class="signal-body">
+            <div class="signal-label" id="signalLabel">—</div>
+            <div class="signal-conf">
+              <span class="conf-num" id="signalConf">—</span>
+              <span class="conf-tag">confidence</span>
+            </div>
+            <div class="probs">
+              <div class="prob"><span class="prob-name">Buy</span>
+                <div class="prob-track"><div class="prob-fill prob-buy" id="pBuyFill"></div></div>
+                <span class="prob-val" id="pBuy">—</span>
+              </div>
+              <div class="prob"><span class="prob-name">Hold</span>
+                <div class="prob-track"><div class="prob-fill prob-hold" id="pHoldFill"></div></div>
+                <span class="prob-val" id="pHold">—</span>
+              </div>
+              <div class="prob"><span class="prob-name">Sell</span>
+                <div class="prob-track"><div class="prob-fill prob-sell" id="pSellFill"></div></div>
+                <span class="prob-val" id="pSell">—</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel reasons-card">
+          <div class="panel-header"><h2>WHY THIS SIGNAL</h2></div>
+          <ul class="reasons" id="reasonsList"></ul>
         </section>
       </div>
     </div>
@@ -189,36 +229,7 @@
       </div>
     </section>
 
-    <!-- ROW: SIGNAL (6) + WHY THIS SIGNAL (6) -->
-    <section class="panel signal-card">
-      <div class="panel-header"><h2>SIGNAL</h2></div>
-      <div class="signal-body">
-        <div class="signal-label" id="signalLabel">—</div>
-        <div class="signal-conf">
-          <span class="conf-num" id="signalConf">—</span>
-          <span class="conf-tag">confidence</span>
-        </div>
-        <div class="probs">
-          <div class="prob"><span class="prob-name">Buy</span>
-            <div class="prob-track"><div class="prob-fill prob-buy" id="pBuyFill"></div></div>
-            <span class="prob-val" id="pBuy">—</span>
-          </div>
-          <div class="prob"><span class="prob-name">Hold</span>
-            <div class="prob-track"><div class="prob-fill prob-hold" id="pHoldFill"></div></div>
-            <span class="prob-val" id="pHold">—</span>
-          </div>
-          <div class="prob"><span class="prob-name">Sell</span>
-            <div class="prob-track"><div class="prob-fill prob-sell" id="pSellFill"></div></div>
-            <span class="prob-val" id="pSell">—</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel reasons-card">
-      <div class="panel-header"><h2>WHY THIS SIGNAL</h2></div>
-      <ul class="reasons" id="reasonsList"></ul>
-    </section>
+    <!-- (Signal & Why-this-signal are now in the hero-row right column) -->
 
     <!-- MODEL SELECTION / ABLATION HEATMAP (collapsed by default) -->
     <section class="panel heatmap-card collapsed" id="heatmapPanel">
