@@ -17,28 +17,44 @@ const COLORS = {
 };
 const LAB_FEATURE_GROUPS = {
   "STAGE 1 · TREND POSTERIOR": [
-    {key: "P1_up",    label: "P1_up",    min: 0, max: 1, step: 0.01},
-    {key: "P1_range", label: "P1_range", min: 0, max: 1, step: 0.01},
-    {key: "P1_down",  label: "P1_down",  min: 0, max: 1, step: 0.01},
+    {key: "P1_up",    label: "P1_up",    min: 0, max: 1, step: 0.01,
+     desc: "Posterior probability the local price trend is UP (Stage 1 Random Forest output)."},
+    {key: "P1_range", label: "P1_range", min: 0, max: 1, step: 0.01,
+     desc: "Posterior probability the trend is RANGE-bound (sideways)."},
+    {key: "P1_down",  label: "P1_down",  min: 0, max: 1, step: 0.01,
+     desc: "Posterior probability the trend is DOWN."},
   ],
   "STAGE 1 · SMOOTHED (10d)": [
-    {key: "P1_up_smooth10",    label: "P1_up_smooth10",    min: 0, max: 1, step: 0.01},
-    {key: "P1_range_smooth10", label: "P1_range_smooth10", min: 0, max: 1, step: 0.01},
-    {key: "P1_down_smooth10",  label: "P1_down_smooth10",  min: 0, max: 1, step: 0.01},
+    {key: "P1_up_smooth10",    label: "P1_up_smooth10",    min: 0, max: 1, step: 0.01,
+     desc: "10-day rolling mean of P1_up. Reduces frame-level noise — a sustained up posterior."},
+    {key: "P1_range_smooth10", label: "P1_range_smooth10", min: 0, max: 1, step: 0.01,
+     desc: "10-day rolling mean of P1_range."},
+    {key: "P1_down_smooth10",  label: "P1_down_smooth10",  min: 0, max: 1, step: 0.01,
+     desc: "10-day rolling mean of P1_down."},
   ],
   "STAGE 2 · MACRO REGIME": [
-    {key: "P2_Bull",    label: "P2_Bull",    min: 0, max: 1, step: 0.01},
-    {key: "P2_Neutral", label: "P2_Neutral", min: 0, max: 1, step: 0.01},
-    {key: "P2_Bear",    label: "P2_Bear",    min: 0, max: 1, step: 0.01},
-    {key: "regime_age_days", label: "regime_age (days)", min: 0, max: 400, step: 1},
+    {key: "P2_Bull",    label: "P2_Bull",    min: 0, max: 1, step: 0.01,
+     desc: "1.0 if Stage 2 FSM classifies today as Bull (risk-on macro), else 0."},
+    {key: "P2_Neutral", label: "P2_Neutral", min: 0, max: 1, step: 0.01,
+     desc: "1.0 if FSM regime is Neutral. (One of the three is always 1.0.)"},
+    {key: "P2_Bear",    label: "P2_Bear",    min: 0, max: 1, step: 0.01,
+     desc: "1.0 if FSM regime is Bear (risk-off — VIX, yield-curve or DXY+M2 stress)."},
+    {key: "regime_age_days", label: "regime_age (days)", min: 0, max: 400, step: 1,
+     desc: "Days since the last regime transition. Newer regimes (low age) = more uncertain."},
   ],
   "OSCILLATORS": [
-    {key: "RSI_14",            label: "RSI (14d)",       min: 0,    max: 100, step: 0.5},
-    {key: "MACD_signal_diff",  label: "MACD − signal",   min: -800, max: 800, step: 1},
-    {key: "Bollinger_pct_b",   label: "Bollinger %B",    min: -0.5, max: 1.5, step: 0.01},
-    {key: "Stochastic_K_14",   label: "Stochastic %K",   min: 0,    max: 100, step: 0.5},
-    {key: "volume_zscore_20",  label: "Volume z-score",  min: -3,   max: 5,   step: 0.05},
-    {key: "OBV_change_20d",    label: "OBV change 20d",  min: -0.5, max: 0.5, step: 0.005},
+    {key: "RSI_14",            label: "RSI (14d)",       min: 0,    max: 100, step: 0.5,
+     desc: "Momentum: <30 = OVERSOLD (potential bounce), >70 = OVERBOUGHT (potential pullback)."},
+    {key: "MACD_signal_diff",  label: "MACD − signal",   min: -800, max: 800, step: 1,
+     desc: "Trend-momentum: positive = bullish (MACD above signal), negative = bearish."},
+    {key: "Bollinger_pct_b",   label: "Bollinger %B",    min: -0.5, max: 1.5, step: 0.01,
+     desc: "Position within 20d±2σ band: <0 = below lower band (oversold), >1 = above upper band (overbought)."},
+    {key: "Stochastic_K_14",   label: "Stochastic %K",   min: 0,    max: 100, step: 0.5,
+     desc: "Like RSI: <20 = oversold, >80 = overbought. Faster than RSI."},
+    {key: "volume_zscore_20",  label: "Volume z-score",  min: -3,   max: 5,   step: 0.05,
+     desc: "Volume relative to 20d mean (z-score). >1 = above-average volume (institutional activity)."},
+    {key: "OBV_change_20d",    label: "OBV change 20d",  min: -0.5, max: 0.5, step: 0.005,
+     desc: "20-day OBV change: positive = ACCUMULATION (buying), negative = DISTRIBUTION (selling)."},
   ],
 };
 
@@ -89,6 +105,11 @@ async function init() {
   // Lab
   $("labToggle").addEventListener("click", () => toggleLab(true));
   $("labClose").addEventListener("click", () => toggleLab(false));
+
+  // Heatmap collapsible — default closed (set in HTML), header click toggles.
+  $("heatmapHeader").addEventListener("click", () => {
+    $("heatmapPanel").classList.toggle("collapsed");
+  });
   document.querySelectorAll(".lab-mode-btn").forEach(b =>
     b.addEventListener("click", () => setLabMode(b.dataset.mode)));
   $("labReset").addEventListener("click", labResetToActual);
@@ -198,10 +219,17 @@ function buildHeroChart() {
     visible: false,
   });
 
-  // Resize
+  // Resize: keep chart sized to its container, and reposition the
+  // selected-date vertical line (its x-pixel changes with chart width / zoom).
   new ResizeObserver(() => {
     chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+    if (ST.bundle && ST.idx >= 0) highlightHeroDate(ST.bundle, ST.idx);
   }).observe(container);
+
+  // When user zooms/pans the time-axis the vertical line must follow.
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+    if (ST.bundle && ST.idx >= 0) highlightHeroDate(ST.bundle, ST.idx);
+  });
 
   // Click to seek
   chart.subscribeClick((param) => {
@@ -254,7 +282,11 @@ function renderHero(bundle) {
 }
 
 function highlightHeroDate(bundle, idx) {
-  // Single marker: the date the user has selected (scrubber position).
+  // Two highlights at the selected date:
+  //   1) blue dot inside the candle (existing)
+  //   2) vertical line spanning the chart height (DOM overlay so we can use
+  //      a soft glow + gradient fade — LightweightCharts has no native
+  //      vertical-line primitive in the free build).
   const sel = bundle.dates[idx];
   ST.hero.candle.setMarkers([{
     time:  sel,
@@ -263,6 +295,17 @@ function highlightHeroDate(bundle, idx) {
     shape: "circle",
     text: "",
   }]);
+
+  const vline = $("heroVLine");
+  if (!vline || !ST.hero.chart) return;
+  const x = ST.hero.chart.timeScale().timeToCoordinate(sel);
+  if (x == null) {
+    vline.style.display = "none";
+    return;
+  }
+  // x is in CSS pixels relative to the chart's drawable area
+  vline.style.left = x.toFixed(1) + "px";
+  vline.style.display = "block";
 }
 
 // ───────────────────────── Scrubber ─────────────────────────
@@ -698,8 +741,19 @@ function updateStage1(b, i) {
 }
 
 function drawGauge(svg, p) {
-  // Half-circle gauge with three arcs (down=red, range=hold, up=buy)
-  // Total angle 180°, segments proportional to p
+  // Half-circle gauge with three arcs (down=red, range=yellow, up=green).
+  // Total angle = 180°, segment lengths proportional to posterior probabilities.
+  //
+  // Bug fixes vs previous version:
+  //  - large-arc-flag is ALWAYS 0 (no single segment can exceed 180°),
+  //    not "1 if p > 0.5" (which produced inverted long-way arcs and
+  //    rendering glitches at p=1).
+  //  - Cap each sweep at 0.998·π so a p=1 segment never hits an exact
+  //    180°, where SVG arc semantics are ambiguous and some renderers
+  //    drop the arc.
+  //  - Solid butt linecap so adjacent arcs join cleanly (no overlap halo).
+  //  - Gray background track always drawn so the panel never looks empty
+  //    if a class is 0.
   const total = (p.down + p.range + p.up) || 1;
   const r = 50, cx = 60, cy = 60;
   const segs = [
@@ -707,18 +761,23 @@ function drawGauge(svg, p) {
     { p: p.range / total, color: "#ffb547" },
     { p: p.up    / total, color: "#00ff9f" },
   ];
-  let a0 = Math.PI;  // start at 180° (left)
-  let html = "";
+
+  // Background track (always full semicircle)
+  let html = `<path d="M 10 60 A 50 50 0 0 1 110 60"
+                stroke="rgba(120,144,184,0.18)" stroke-width="9"
+                fill="none" stroke-linecap="butt" />`;
+
+  let a0 = Math.PI;  // start at 180° (left side of semicircle)
   for (const s of segs) {
-    const a1 = a0 - s.p * Math.PI;  // counter-clockwise toward 0°
-    const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
-    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-    const large = s.p > 0.5 ? 1 : 0;
-    if (s.p > 0.001) {
-      html += `<path d="M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}"
-                  stroke="${s.color}" stroke-width="9" fill="none" stroke-linecap="round" />`;
+    const sweep = Math.min(s.p, 0.998) * Math.PI;
+    const a1 = a0 - sweep;
+    if (s.p >= 0.005) {
+      const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
+      const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      html += `<path d="M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}"
+                  stroke="${s.color}" stroke-width="9" fill="none" stroke-linecap="butt" />`;
     }
-    a0 = a1;
+    a0 = a1;  // always advance angle so next segment starts in the right place
   }
   svg.innerHTML = html;
 }
@@ -858,20 +917,53 @@ function updateOutcomes(b, i) {
     const cell = $(id);
     if (j >= b.n) {
       cell.className = "outcome-cell";
-      cell.innerHTML = `<label>${h} days</label><b>—</b><small>future</small>`;
+      cell.innerHTML = `<label>${h}d price</label><b>—</b><small>future</small>`;
       return;
     }
     const r = (close[j] - close[i]) / close[i];
     cell.className = "outcome-cell " + (r >= 0 ? "pos" : "neg");
-    cell.innerHTML = `<label>${h} days</label><b>${fmt.pct(r, 1)}</b><small>${fmt.price(close[j])}</small>`;
+    cell.innerHTML = `<label>${h}d price</label><b>${fmt.pct(r, 1)}</b><small>${fmt.price(close[j])}</small>`;
   };
   set("oc5", 5); set("oc10", 10); set("oc30", 30);
 
-  // Trade simulation: simulate from this date — find next opposite signal in stateful logic
-  const sigNow = b.active_signals[i];
+  // ── Strategy decision (rule-aware): what does our trading rule actually do
+  // on this day, given the position trajectory in bundle.positions[]?
+  // This is what really matters for backtest P&L; the BUY/HOLD/SELL signal
+  // alone does not yet imply a trade.
+  const stratEl = $("stratDecText");
+  const pos     = b.positions[i] ?? 0;
+  const posPrev = i > 0 ? (b.positions[i - 1] ?? 0) : 0;
+  const sigNow  = b.active_signals[i];
+  let decClass, decText;
+  if (pos > 0 && posPrev === 0) {
+    decClass = "enter";
+    decText  = `▲ ENTERED long position` +
+               (b.rule === "prob_weighted" ? ` · size ${pos.toFixed(2)}` : "");
+  } else if (pos > 0 && posPrev > 0) {
+    decClass = "hold";
+    const sizeChange = pos - posPrev;
+    if (Math.abs(sizeChange) > 0.005) {
+      decText = `→ HOLDING long · size ${posPrev.toFixed(2)} → ${pos.toFixed(2)}`;
+    } else {
+      decText = `→ HOLDING long position` +
+                (b.rule === "prob_weighted" ? ` · size ${pos.toFixed(2)}` : "");
+    }
+  } else if (pos === 0 && posPrev > 0) {
+    decClass = "exit";
+    decText  = `▼ EXITED long position`;
+  } else {
+    decClass = "cash";
+    decText  = `· STAY in cash` + (sigNow === "Buy" || sigNow === "Sell" ? ` (rule kept us out despite ${sigNow} signal)` : "");
+  }
+  stratEl.className = "strat-decision-text " + decClass;
+  stratEl.textContent = decText;
+
+  // ── "If we acted on this signal" — finds next opposite signal as the
+  // exit point, regardless of the rule. Pedagogical, not the real backtest
+  // (which uses positions[] above).
   const sim = $("tradeSim");
   if (sigNow !== "Buy" && sigNow !== "Sell") {
-    sim.innerHTML = `<span class="tk">trade</span><span class="tv">no entry — Hold day</span>`;
+    sim.innerHTML = `<span class="tk">trade sim</span><span class="tv">no entry — Hold day</span>`;
     return;
   }
   const opposite = sigNow === "Buy" ? "Sell" : "Buy";
@@ -883,9 +975,9 @@ function updateOutcomes(b, i) {
   const pnl = sigNow === "Buy" ? (p1 - p0) / p0 : (p0 - p1) / p0;
   const days = exit - i;
   sim.innerHTML = `
-    <span><span class="tk">action</span><span class="tv">${sigNow}</span></span>
+    <span class="sim-head">if you acted on the ${sigNow} signal:</span>
     <span><span class="tk">entry</span><span class="tv">${b.dates[i]} @ ${fmt.price(p0)}</span></span>
-    <span><span class="tk">exit</span><span class="tv">${b.dates[exit]} @ ${fmt.price(p1)}</span></span>
+    <span><span class="tk">exit (next ${opposite})</span><span class="tv">${b.dates[exit]} @ ${fmt.price(p1)}</span></span>
     <span><span class="tk">held</span><span class="tv">${days}d</span></span>
     <span><span class="tk">P&L</span><span class="tv ${pnl >= 0 ? 'pos' : 'neg'}">${fmt.pct(pnl, 2)}</span></span>
   `;
@@ -1004,6 +1096,10 @@ function activateHeatmapCell(el) {
 function toggleLab(open) {
   ST.labOpen = open;
   $("labDrawer").classList.toggle("hidden", !open);
+  // Hide the floating WHAT-IF LAB button while the drawer is open so it
+  // doesn't overlap the drawer's own controls. It comes back when the
+  // drawer is closed (via × in the drawer header).
+  $("labToggle").classList.toggle("hidden", open);
   if (open) {
     if (!Object.keys(ST.labFeatures).length) buildLabSliders();
     syncLabFromActual();
@@ -1035,9 +1131,11 @@ function buildLabSliders() {
     for (const f of feats) {
       const row = document.createElement("div");
       row.className = "lab-slider";
+      const desc = f.desc ? `<div class="lab-slider-desc">${f.desc}</div>` : "";
       row.innerHTML = `
-        <div>
+        <div class="lab-slider-main">
           <div class="lab-slider-label">${f.label}</div>
+          ${desc}
           <input type="range" min="${f.min}" max="${f.max}" step="${f.step}" data-key="${f.key}" />
         </div>
         <div class="lab-slider-value" data-key-val="${f.key}">—</div>

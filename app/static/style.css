@@ -228,6 +228,22 @@ select, input { font-family: inherit; }
   height: 460px;
   background: var(--bg-0);
   border-radius: 4px;
+  position: relative;
+}
+.hero-vline {
+  position: absolute;
+  top: 4px;
+  bottom: 22px;     /* leave room above x-axis labels */
+  width: 1px;
+  background: linear-gradient(to bottom,
+                              rgba(77, 138, 255, 0)    0%,
+                              rgba(77, 138, 255, 0.85) 8%,
+                              rgba(77, 138, 255, 0.85) 92%,
+                              rgba(77, 138, 255, 0)    100%);
+  pointer-events: none;
+  display: none;
+  z-index: 5;
+  box-shadow: 0 0 6px rgba(77, 138, 255, 0.55);
 }
 
 /* ─────────────── PORTFOLIO RACE ─────────────── */
@@ -594,6 +610,33 @@ select, input { font-family: inherit; }
 .outcome-cell.neg { border-color: var(--sell-dim); }
 .outcome-cell.neg b { color: var(--sell); }
 
+.strategy-decision {
+  background: var(--bg-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.strategy-decision label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--txt-2);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.strategy-decision b {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.strat-decision-text.enter { color: var(--buy);  text-shadow: 0 0 8px rgba(0,255,159,0.3); }
+.strat-decision-text.hold  { color: var(--accent); }
+.strat-decision-text.exit  { color: var(--sell); text-shadow: 0 0 8px rgba(255,56,96,0.3); }
+.strat-decision-text.cash  { color: var(--txt-2); font-style: italic; }
+
 .trade-sim {
   background: var(--bg-2);
   border-radius: 6px;
@@ -604,6 +647,14 @@ select, input { font-family: inherit; }
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
+}
+.trade-sim .sim-head {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--txt-2);
+  font-style: italic;
+  margin-bottom: 4px;
 }
 .trade-sim .tk {
   color: var(--txt-2);
@@ -617,6 +668,24 @@ select, input { font-family: inherit; }
 .trade-sim .tv.neg { color: var(--sell); }
 
 .heatmap-card { grid-column: span 12; }
+.heatmap-header {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  align-items: center;
+}
+.heatmap-header:hover .collapse-caret { color: var(--accent); }
+.collapse-caret {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--txt-2);
+  transition: transform 0.2s ease;
+}
+.heatmap-card.collapsed .collapse-caret { transform: translateY(-50%) rotate(-90deg); }
+.heatmap-card.collapsed .heatmap { display: none; }
 .heatmap {
   display: grid;
   gap: 2px;
@@ -760,10 +829,22 @@ select, input { font-family: inherit; }
   display: grid;
   grid-template-columns: 1fr 56px;
   gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
+  align-items: start;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(120,144,184,0.10);
 }
+.lab-slider:last-child { border-bottom: none; }
+.lab-slider-main { display: flex; flex-direction: column; gap: 4px; }
 .lab-slider-label { font-family: var(--mono); font-size: 10px; color: var(--txt-1); }
+.lab-slider-desc {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--txt-3);
+  font-style: italic;
+  margin-bottom: 2px;
+}
 .lab-slider input[type=range] {
   -webkit-appearance: none;
   width: 100%;

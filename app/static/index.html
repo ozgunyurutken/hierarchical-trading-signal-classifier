@@ -84,7 +84,9 @@
           <span class="legend-pill marker-sell">▼ Sell</span>
         </div>
       </div>
-      <div id="heroChart" class="hero-chart"></div>
+      <div id="heroChart" class="hero-chart">
+        <div id="heroVLine" class="hero-vline"></div>
+      </div>
     </section>
 
     <!-- PORTFOLIO RACE -->
@@ -205,14 +207,21 @@
         <div class="outcome-cell" id="oc10"><label>10 days</label><b>—</b></div>
         <div class="outcome-cell" id="oc30"><label>30 days</label><b>—</b></div>
       </div>
+      <div class="strategy-decision" id="strategyDecision">
+        <label>STRATEGY DECISION (rule-aware)</label>
+        <b id="stratDecText">—</b>
+      </div>
       <div class="trade-sim" id="tradeSim">—</div>
     </section>
 
-    <!-- ABLATION HEATMAP -->
-    <section class="panel heatmap-card">
-      <div class="panel-header">
-        <h2>ABLATION · SHARPE</h2>
-        <div class="panel-subtitle">click cell to activate that combo</div>
+    <!-- MODEL SELECTION / ABLATION HEATMAP (collapsed by default) -->
+    <section class="panel heatmap-card collapsed" id="heatmapPanel">
+      <div class="panel-header heatmap-header" id="heatmapHeader">
+        <h2>MODEL SELECTION · ABLATION</h2>
+        <div class="panel-subtitle">
+          best model per asset is auto-selected · click to expand
+        </div>
+        <span class="collapse-caret" id="heatmapCaret">▾</span>
       </div>
       <div id="heatmap" class="heatmap"></div>
     </section>
