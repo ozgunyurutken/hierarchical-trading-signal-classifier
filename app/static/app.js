@@ -231,6 +231,63 @@ function buildHeroChart() {
     if (ST.bundle && ST.idx >= 0) highlightHeroDate(ST.bundle, ST.idx);
   });
 
+  // Hover tooltip: when crosshair lands on a date that matches a trade
+  // entry or exit, show a small popover with realized P&L / dates / prices.
+  chart.subscribeCrosshairMove((param) => {
+    const tt = $("heroTooltip");
+    if (!tt) return;
+    if (!ST.bundle || !param || !param.time || !param.point) {
+      tt.style.display = "none";
+      return;
+    }
+    const date = param.time;
+    let kind = null, trade = null;
+    for (const t of ST.bundle.trades) {
+      // Only show tooltip for events that are visible on the chart, i.e.
+      // events inside the active race window AND already played-through.
+      const inWindow = ST.raceStart < 0
+        ? false
+        : (t.entry_idx >= ST.raceStart && t.entry_idx <= ST.idx);
+      if (!inWindow) continue;
+      if (t.entry_date === date) { kind = "entry"; trade = t; break; }
+      if (t.exit_date  === date && t.exit_idx <= ST.idx) { kind = "exit"; trade = t; break; }
+    }
+    if (!trade) {
+      tt.style.display = "none";
+      return;
+    }
+
+    const x = param.point.x, y = param.point.y;
+    if (x == null || y == null) {
+      tt.style.display = "none";
+      return;
+    }
+    if (kind === "entry") {
+      tt.className = "hero-tooltip entry";
+      tt.innerHTML = `
+        <div class="tt-head entry-h">▲ ENTRY</div>
+        <div class="tt-row"><span>date</span><span>${trade.entry_date}</span></div>
+        <div class="tt-row"><span>price</span><span>${fmt.price(trade.entry_price)}</span></div>
+      `;
+    } else {
+      const pct = trade.return_pct;
+      const sign = pct >= 0 ? "+" : "";
+      const cls  = pct >= 0 ? "pos" : "neg";
+      const days = trade.exit_idx - trade.entry_idx;
+      tt.className = "hero-tooltip exit";
+      tt.innerHTML = `
+        <div class="tt-head exit-h">▼ EXIT</div>
+        <div class="tt-row"><span>date</span><span>${trade.exit_date}</span></div>
+        <div class="tt-row"><span>price</span><span>${fmt.price(trade.exit_price)}</span></div>
+        <div class="tt-row"><span>realized P&L</span><span class="${cls}">${sign}${(pct * 100).toFixed(2)}%</span></div>
+        <div class="tt-row"><span>held</span><span>${days}d</span></div>
+      `;
+    }
+    tt.style.left = x.toFixed(0) + "px";
+    tt.style.top  = y.toFixed(0) + "px";
+    tt.style.display = "block";
+  });
+
   // Click to seek
   chart.subscribeClick((param) => {
     if (!ST.bundle || !param.time) return;

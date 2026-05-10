@@ -295,6 +295,58 @@ select, input { font-family: inherit; }
   box-shadow: 0 0 6px rgba(77, 138, 255, 0.55);
 }
 
+/* Hover tooltip on hero chart — surfaces realized P&L for trade
+   entries/exits when the crosshair is on that date. */
+.hero-tooltip {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  background: rgba(6, 9, 15, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--txt-0);
+  z-index: 6;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 12px));
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.6);
+  min-width: 150px;
+}
+.hero-tooltip.entry {
+  border-color: var(--buy);
+  box-shadow: 0 2px 14px rgba(0, 255, 159, 0.35);
+}
+.hero-tooltip.exit {
+  border-color: var(--sell);
+  box-shadow: 0 2px 14px rgba(255, 56, 96, 0.35);
+}
+.hero-tooltip .tt-head {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.hero-tooltip .tt-head.entry-h { color: var(--buy); }
+.hero-tooltip .tt-head.exit-h  { color: var(--sell); }
+.hero-tooltip .tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1px 0;
+}
+.hero-tooltip .tt-row span:first-child {
+  color: var(--txt-2);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+.hero-tooltip .tt-row span:last-child  { color: var(--txt-0); font-weight: 600; }
+.hero-tooltip .tt-row .pos { color: var(--buy); }
+.hero-tooltip .tt-row .neg { color: var(--sell); }
+
 /* ─────────────── PORTFOLIO RACE ─────────────── */
 
 .race { grid-column: span 6; padding: 12px 16px 14px; }
