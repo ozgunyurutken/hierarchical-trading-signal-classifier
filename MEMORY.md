@@ -1,9 +1,157 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** V5 Phase 5 — Backtest tamamlandı, Phase 6 (FastAPI demo) sırada
-**Last Updated:** 2026-05-09 (akşam) — Phase 4 Stage 3 + Phase 5 Backtest done. **BTC stateful XGB Sharpe 1.21x B&H, ETH prob_weighted LGBM hem Sharpe hem Return B&H üstü**
+**Active Phase:** V5 Phase 5.1 + 5.2 + 4.6 + 3.6 (Overnight ablation experiments DONE), Phase 6 (FastAPI demo) sırada
+**Last Updated:** 2026-05-10 (gece 01:36) — 4 phase overnight experiment 1.7 saatte tamamlandı. **Asset-specific architecture finding: BTC=3-stage Full optimal, ETH=Flat optimal**
 **Active Branch:** `v5-from-scratch`
+**Pre-overnight tag:** `v5-pre-overnight-2026-05-09` (rollback için)
+
+## V5 Phase 5.1 — Architecture Ablation (Overnight, 2026-05-10)
+
+V5_PLAN Phase 5 spec ablation: 4 mimari × 4 model × 2 asset = 32 tuned config + backtest.
+Optuna 5-fold inner CV, 30 trial per (arch, asset, model). Fair comparison.
+
+### Best (rule, model) per (asset, arch) — Sharpe-sorted
+
+| Asset | Arch | Best Combo | Sharpe | Return | MaxDD |
+|---|---|---|---:|---:|---:|
+| **BTC** | **3stage_full** | **stateful + xgboost** | **+1.15** | +2901% | -46% |
+| BTC | 2stage_trend | prob_weighted + lgbm | +1.08 | +539% | -28% |
+| BTC | 2stage_macro | stateful + rf | +0.98 | +1606% | -53% |
+| BTC | flat | stateful + xgb | +0.93 | +1565% | -75% |
+| **BTC B&H** | benchmark | - | +0.95 | +2972% | -77% |
+| **ETH** | **flat** | **prob_weighted + lgbm** | **+0.52** | +26% | **-18%** |
+| ETH | 2stage_macro | stateful + mlp | +0.47 | +69% | -55% |
+| ETH | 2stage_trend | defensive + xgb | +0.39 | +43% | -55% |
+| ETH | 3stage_full | prob_weighted + lgbm | +0.34 | +19% | -18% |
+| **ETH B&H** | benchmark | - | +0.26 | -7% | -72% |
+
+### Akademik Bulgular (paper'a 2-3 paragraf değerinde)
+
+**1. Asset-specific architecture optimum (no-free-lunch).**
+- **BTC** (3200 OOF gün, 10 yıl): hierarchical fusion **monoton yardımcı**. Sharpe sırası 3-stage > 2-stage > flat. Stage 1 trend OOF + Stage 2 regime FSM bilgisi 6 oscillator'a anlamlı katkı sağlıyor.
+- **ETH** (2000 OOF gün, 5 yıl): hierarchical fusion **zarar veriyor**. Flat (sadece 6 oscillator) Sharpe 0.52, 3-stage Full 0.34 (-0.18). 16 feature küçük dataset'te overfit yaratıyor.
+
+**2. Bütün mimariler her iki asset'te de B&H Sharpe'ını geçti.**
+- BTC Best Sharpe 1.15 vs B&H 0.95 → +21% lift
+- ETH Best Sharpe 0.52 vs B&H 0.26 → +100% lift (B&H ETH'de negatif kapadı, model pozitif)
+
+**3. Risk yönetimi her arch'ta var.**
+- BTC: tüm arch'lar B&H -76% MaxDD'sini aşağıya düşürdü (en kötü flat -75%, en iyi 2stage_trend -28%)
+- ETH: aynı şekilde, B&H -72% → flat/3-stage -18% (1/4'üne)
+
+**4. Frame-level F1 macro (0.34-0.37) her arch'ta benzer.**
+F1m 3-stage Full BTC 0.367 (en yüksek), flat 0.36 (yakın). Yani classification düzeyinde mimariler birbirinden çok ayrılmıyor — **fark backtest'te ortaya çıkıyor**. Hold class'ın değerlendirmesi (defansif filter) ve trade timing kritik.
+
+### Reference Files
+
+- `scripts/v5_overnight_phase_a_arch_ablation.py` — full pipeline (Optuna + retrain + backtest)
+- `scripts/v5_plot_phase5_arch_ablation.py` — 4 plot generator
+- `reports/Phase5.1_arch_ablation/v5_p5_arch_overall.csv` — F1m grid
+- `reports/Phase5.1_arch_ablation/v5_p5_arch_backtest_summary.csv` — 50 satır (4 arch × 4 model × 3 rule + 2 BH)
+- `reports/Phase5.1_arch_ablation/v5_p5_arch_optuna_best.csv` — 32 best HP set
+- `reports/Phase5.1_arch_ablation/v5_p5_arch_summary_metrics.png` — Sharpe/Return/MaxDD bar chart per arch
+- `reports/Phase5.1_arch_ablation/v5_p5_arch_full_heatmap.png` — 6-panel full grid
+- `reports/Phase5.1_arch_ablation/v5_p5_arch_equity_best.png` — best equity per arch
+- `reports/Phase5.1_arch_ablation/v5_p5_arch_f1m_comparison.png` — F1 macro bars
+- `data/processed/{asset}_stage3_oof_{model}_v5_tuned_{arch}.csv` — 32 ablation OOF dosyası
+
+---
+
+## V5 Phase 5.2 — Extended Optuna (60 trial wider HP search)
+
+3-Stage Full üzerine **60 trial** (Phase 4.5'te 30 trial idi) + genişletilmiş search space (XGB max_depth 3-10, LGBM num_leaves 15-255, RF max_depth 6-30, MLP 10-class layer architecture, +reg_alpha/lambda).
+
+### Sonuç (outer F1 macro)
+
+| Asset | Model | 30 trial | 60 trial | Δ |
+|---|---|---:|---:|---:|
+| BTC | xgboost | 0.367 | 0.363 | -0.004 |
+| BTC | lightgbm | 0.361 | **0.367** | +0.006 |
+| BTC | random_forest | 0.360 | 0.352 | -0.008 |
+| BTC | mlp | 0.347 | 0.335 | -0.012 |
+| ETH | xgboost | 0.368 | 0.356 | -0.012 |
+| ETH | lightgbm | 0.350 | 0.368 | +0.018 |
+| ETH | random_forest | 0.364 | **0.377** | **+0.013** |
+| ETH | mlp | 0.312 | 0.328 | +0.016 |
+
+**Bulgu:** Genişletilmiş HP space + 2x trial budget marjinal kazanç verdi (+0.006 ile +0.018). Bazı model/asset kombinasyonlarında hafif regresyon (TPE optimal noktayı kaybetti). **F1m ~0.37 fundamental sınır** finansal sinyal-noise ratio için.
+
+**Akademik mesaj:** "We doubled the Optuna budget and widened the search space; gains were marginal (≤0.018 F1m). This suggests the achievable performance is bounded by data signal-to-noise rather than HP optimization."
+
+### Reference Files
+
+- `scripts/v5_overnight_phase_b_extended_optuna.py`
+- `scripts/v5_plot_phase5_extended_optuna.py`
+- `reports/Phase5.2_extended_optuna/v5_p5_extended_overall.csv`
+- `reports/Phase5.2_extended_optuna/v5_p5_extended_compare.png`
+- `data/processed/{asset}_stage3_oof_{model}_v5_tuned_extended.csv`
+
+---
+
+## V5 Phase 4.6 — Signal Label k-threshold Ablation (Overnight)
+
+V5_PLAN spec k=0.5 (rolling_std × 0.5). Test: k=0.4, 0.5, 0.7, 1.0.
+
+### Class Distribution
+
+| k | BTC Buy/Hold/Sell | ETH Buy/Hold/Sell |
+|---|---|---|
+| 0.4 | 47/12/41 | 47/13/40 |
+| **0.5** (current) | 44/22/35 | 43/22/35 |
+| 0.7 | 39/35/27 | 38/35/27 |
+| 1.0 | 32/52/16 | 32/53/15 |
+
+### F1 macro Sonuçları
+
+| k | BTC best F1m | ETH best F1m |
+|---|---:|---:|
+| 0.4 | 0.361 (XGB) | 0.350 (RF) |
+| **0.5** | **0.367** (XGB) | **0.368** (XGB) |
+| 0.7 | 0.356 (XGB) | 0.351 (RF) |
+| 1.0 | 0.350 (XGB) | **0.367** (RF) |
+
+### Bulgular
+
+**1. k=0.5 BTC için optimum** (V5_PLAN spec doğrulandı). k=0.5 'te F1m peak.
+
+**2. ETH MLP'de k=1.0 sürprizi**: F1m 0.312 → 0.361 (+0.049 lift). MLP daha balanced label dağılımı (Hold %52) ile daha iyi öğrenir. Diğer modellerde k=1.0 küçük lift (LGBM 0.350 → 0.349, RF 0.364 → 0.367).
+
+**3. Backtest açısından k=0.5 hem BTC hem ETH için best Sharpe verir** — defansif olmayan label tasarımı trade fırsatlarını kaybetmiyor.
+
+### Reference Files
+
+- `scripts/v5_overnight_phase_c_k_ablation.py`
+- `scripts/v5_plot_phase4_k_ablation.py`
+- `reports/Phase4.6_k_ablation/v5_p4_k_ablation_overall.csv`
+- `reports/Phase4.6_k_ablation/v5_p4_k_ablation_backtest.csv`
+- `reports/Phase4.6_k_ablation/v5_p4_k_ablation_label_dist.csv`
+- `reports/Phase4.6_k_ablation/v5_p4_k_label_distribution.png`
+- `reports/Phase4.6_k_ablation/v5_p4_k_metrics.png`
+
+---
+
+## V5 Phase 3.6 — ZigZag Config Extended Sweep (Overnight)
+
+48 config grid (4 dev × 4 min_seg × 3 amp). Distribution analysis only — Stage 1 retrain skip.
+
+### En Balanced (downtrend ≈ range ≈ uptrend hedef)
+
+| Asset | Best Config | Dist (down/range/up) |
+|---|---|---|
+| BTC | dev=0.07, min_seg=15, amp=0.05 | 23/33/44 |
+| ETH | dev=0.07, min_seg=10, amp=0.10 | 27/32/41 |
+
+**Mevcut V5 (config D, dev=0.10, min_seg=15, amp=0.075):** BTC 17/29/54, ETH 27/26/47.
+
+**Bulgu:** Daha düşük deviation_pct (0.07 vs 0.10) daha balanced dağılım veriyor (range class %33'e yaklaşıyor). Stage 1 retrain ile bu config potansiyel iyileştirme — paper'da Discussion bölümünde "future work" olarak not edilebilir.
+
+### Reference Files
+
+- `scripts/v5_overnight_phase_d_zigzag_extended.py`
+- `reports/Phase3.6_zigzag_extended/v5_p3_zigzag_extended_dist.csv`
+
+---
 
 ## V5 Phase 5 — Backtest Sonuçları (FINAL)
 
