@@ -1,11 +1,11 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** V5 Phase 6.12 — Demo (FastAPI + Bloomberg-style live terminal) DONE; Phase 7 (IEEE paper) drafted
-**Last Updated:** 2026-05-10 — Web demo defalarca polishledi (12 alt-faz). Paper LaTeX hazır.
+**Active Phase:** V5 Phase G/H/I — Improvement triple (regime-conditional, calibration, MLP oversample) COMPLETE; Phase J (master comparison + plots) COMPLETE; paper revise paralel session'da
+**Last Updated:** 2026-05-10 — Phase G+H+I+J bitti, deadline 12 May
 **Active Branch:** `v5-from-scratch`
-**Pre-overnight tag:** `v5-pre-overnight-2026-05-09` (rollback için)
-**Latest commit:** `e876028 Phase 6.12 — Hero row: collapsible left-stack + persistent right-stack`
+**Tags:** `v5-pre-overnight-2026-05-09`, `v5-pre-improvements-2026-05-10` (rollback için)
+**Latest commit:** `33b59f7` Phase G/H/I scaffolding (sonraki commit Phase G/H/I/J data + plots)
 
 ## V5 Phase 6 — FastAPI Demo (Bloomberg-style live terminal)
 
@@ -1414,3 +1414,119 @@ Kullanıcı: "önce literatür taraması yapalım, problemleri nasıl ele almı�
 7. Class imbalance in finance ML — bizim CM Sell-bias
 
 Çıktı: `docs/LITERATURE_REVIEW.md` (15-25 atıflı).
+
+## V5 Phase G/H/I/J — Improvement Triple (2026-05-10)
+
+Deadline 12 May'a uzayınca 4 component'lik plan (regime-conditional features, isotonic calibration, MLP oversample, paper revise). Paper revise yan session'da; bu session backend deneyleri yürüttü.
+
+**Pre-improvement checkpoint:** tag `v5-pre-improvements-2026-05-10` (commit `33b59f7`).
+
+### Phase G — Regime-conditional ablation (3stage_full_regime, 22 features)
+
+`scripts/v5_phase_g_regime_aware.py` + `STAGE3_FEATURE_COLS_EXTENDED` (16 + 6 interactions: RSI/MACD/BBpb × P_Bull/P_Bear). 30 trial × 4 model × 2 asset Optuna + walk-forward outer + 3 trading rules.
+
+Outer F1-macro vs Phase 5.1 baseline:
+| asset | model | base 16 | regime 22 | Δ |
+|---|---|---|---|---|
+| BTC | xgboost | 0.367 | 0.367 | 0.000 |
+| BTC | lightgbm | 0.361 | 0.359 | −0.002 |
+| BTC | random_forest | 0.360 | 0.363 | +0.003 |
+| BTC | mlp | 0.347 | 0.335 | −0.012 |
+| ETH | xgboost | 0.348 | 0.364 | +0.016 |
+| ETH | lightgbm | 0.346 | 0.359 | +0.013 |
+| ETH | random_forest | 0.342 | 0.365 | +0.023 |
+| ETH | mlp | 0.285 | 0.300 | +0.015 |
+
+Best Sharpe per asset:
+- BTC: P5.1 xgb stateful +1.147 → P7 RF stateful **+1.198** (+0.051), MaxDD −0.460 → −0.440
+- ETH: P5.1 lgbm pw +0.336 → P7 lgbm pw +0.334 (−0.002), MaxDD −0.180 → −0.133
+
+Yorum: ETH'da F1 marjinal düzeldi ama Sharpe değişmedi; BTC'de küçük Sharpe lift + risk azaldı. Paper'da "regime-conditioning küçük lift sağlıyor, asset-specific etkili" no-free-lunch bulgusu.
+
+### Phase H — Walk-forward isotonic calibration
+
+`src/models/v5_stage3_calibration.py` + `scripts/v5_phase_h_calibration.py`. Her outer fold'da training span'in son 200 günü inner-calib olarak ayrıldı (no leakage). 8 hedef (BTC 3stage_full × 4 model + ETH flat × 4 model).
+
+ECE (mean across classes) raw → cal:
+| asset | arch | model | raw | cal | reduction |
+|---|---|---|---|---|---|
+| BTC | 3stage_full | xgboost | 0.155 | 0.080 | +48.4% |
+| BTC | 3stage_full | lightgbm | 0.216 | 0.084 | **+60.9%** |
+| BTC | 3stage_full | random_forest | 0.076 | 0.078 | −2.5% |
+| BTC | 3stage_full | mlp | 0.238 | 0.091 | **+61.6%** |
+| ETH | flat | lightgbm | 0.086 | 0.088 | −1.6% |
+| ETH | flat | xgboost | 0.097 | 0.082 | +16.2% |
+| ETH | flat | random_forest | 0.060 | 0.073 | −21.7% |
+| ETH | flat | mlp | 0.091 | 0.074 | +18.6% |
+
+5/8 iyileşme. RF'ler zaten kalibre (boosting/bagging birleşik), XGB+MLP'de büyük iyileşme.
+
+**Önemli**: Sharpe lift (prob_weighted rule, raw vs cal) **çoğunlukla negatif**:
+| asset | model | raw | cal | lift |
+|---|---|---|---|---|
+| BTC | random_forest | +0.669 | +0.755 | +0.086 |
+| BTC | xgboost | +0.606 | +0.640 | +0.034 |
+| BTC | lightgbm | +0.689 | +0.476 | −0.213 |
+| BTC | mlp | +0.602 | +0.333 | −0.268 |
+| ETH | random_forest | +0.282 | −0.179 | −0.461 |
+| ETH | mlp | +0.454 | +0.433 | −0.021 |
+| ETH | xgboost | +0.268 | +0.232 | −0.036 |
+| ETH | lightgbm | +0.528 | +0.444 | −0.084 |
+
+Paper-grade bulgu: **kalibrasyon probabilite kalitesini düzeltir ama trading Sharpe'ı düşürür**. Miscalibrated overconfidence prob_weighted rule'da position size'ı şişirir, bu da winning trade'lerde edge sağlıyor. Kalibrasyon o keskinliği törpülüyor → expected value değişmese bile Sharpe düşüyor (bias-variance tradeoff'un trading manifestasyonu).
+
+### Phase I — MLP RandomOverSampler
+
+`scripts/v5_phase_i_mlp_oversample.py`, `imblearn.RandomOverSampler` walk-forward train fold içine fit edildi (validation fold'a değmedi). 4 hedef (BTC ve ETH × flat ve 3stage_full).
+
+| asset | arch | F1m base → over | Hold-F1 base → over |
+|---|---|---|---|
+| BTC | 3stage_full | 0.347 → 0.356 (+0.010) | 0.177 → 0.234 (+0.056) |
+| BTC | flat | 0.304 → 0.335 (+0.030) | 0.058 → 0.229 (+0.171) |
+| ETH | flat | 0.285 → 0.333 (+0.048) | **0.000 → 0.241** (+0.241) |
+| ETH | 3stage_full | 0.312 → 0.334 (+0.023) | 0.135 → 0.257 (+0.122) |
+
+Tüm 4 hedefte F1m + Hold-F1 lift. ETH flat MLP'nin Hold-F1 0.000 → 0.241 = paper-grade fix (MLP'nin Hold class'ını sıfırdan kurtardı).
+
+**Aynı paradoks**: F1 lift'e rağmen Sharpe ortalamada **negatif** (Phase J master tablosunda). Reason: oversample → daha çok Hold tahmini → daha az trade → trade-of-opportunity kaybı. Buy/Sell precision-recall tradeoff Hold'a kayıyor, position'da kalmama → potansiyel rally kaçırma.
+
+### Phase J — Master comparison
+
+`scripts/v5_phase_j_summarize_improvements.py`. 4 fazı tek master CSV + 2 figure'da topladı:
+- `reports/Phase10_summary/v5_p10_master_backtest.csv` (180 row)
+- `reports/Phase10_summary/v5_p10_master_overall.csv` (44 row)
+- `reports/Phase10_summary/v5_p10_best_per_combo.csv`
+- `reports/Phase10_summary/fig_calibration_ece.png`
+- `reports/Phase10_summary/fig_oversample_f1.png`
+
+**Headline (best Sharpe per asset across ALL phases):**
+- BTC: **Phase 7 RF stateful 3stage_full_regime → +1.198** Sharpe, +29.4 return, −0.44 MaxDD
+- ETH: P8 raw RF stateful flat → +0.557 (Phase 5.1 baseline +0.336 ile karşılaştırıldığında lift, ama P8 raw outer fit calib_size farkı yüzünden farklı seed eğitim seti — robustness check olarak değerlendirilmeli, primary baseline P5.1 lgbm pw +0.336 olarak bırakılmalı)
+
+### Paper-ready findings (kullanılabilir Discussion content)
+
+1. **Asset-specific architecture optimum** (Phase 5.1): BTC = 3stage_full, ETH = flat. No-free-lunch, paper'ın Discussion ana noktası.
+2. **Regime-conditioning trade-off** (Phase G): BTC küçük Sharpe lift + risk azaltma, ETH F1 marjinal düzeldi ama trading değişmedi. Asset-asymmetric.
+3. **ML metric ↛ trading metric** (Phase H + I): F1/ECE düzeltmek Sharpe'ı düşürebilir. İki bağımsız experiment aynı sonucu veriyor → robust bulgu.
+4. **Class imbalance fix** (Phase I): MLP'nin Hold class'ı RandomOverSampler ile kurtarıldı (ETH flat 0.000 → 0.241). Trading Sharpe'a yansımadı ama doğru classifier behavior için kritik.
+5. **RSI/MACD model ≠ classical TA** (Phase 6 W&L gözlem): RSI>70 → +3.25% mean fwd return on BTC. Verified data-driven divergence, paper'a Discussion finding.
+
+### Çıktı dosyaları (reports/)
+```
+Phase7_regime_aware/
+  v5_p7_overall.csv  v5_p7_backtest.csv  v5_p7_optuna_best.csv
+  v5_p7_equity_curves_{btc,eth}.csv
+Phase8_calibration/
+  v5_p8_calibration_metrics.csv  v5_p8_backtest_compare.csv
+Phase9_mlp_oversample/
+  v5_p9_overall.csv  v5_p9_backtest.csv
+Phase10_summary/
+  v5_p10_master_backtest.csv  v5_p10_master_overall.csv
+  v5_p10_best_per_combo.csv
+  fig_calibration_ece.png  fig_oversample_f1.png
+```
+
+Yeni OOF CSV'leri `data/processed/`:
+- `*_stage3_oof_{model}_v5_tuned_3stage_full_regime.csv` (8 dosya)
+- `*_stage3_oof_{model}_v5_calibrated_{arch}.csv` (8 dosya)
+- `*_stage3_oof_mlp_v5_oversampled_{arch}.csv` (4 dosya)
