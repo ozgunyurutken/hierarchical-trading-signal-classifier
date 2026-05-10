@@ -294,8 +294,25 @@ function highlightHeroDate(bundle, idx) {
 
   const markers = [];
   if (ST.raceStart >= 0) {
+    // If the race began inside an open trade, show a faint ghost entry at
+    // raceStart so the next exit is visually grounded ("we were already
+    // in this trade when ▶ was pressed"). Otherwise the chart shows a
+    // bare red exit arrow with no preceding green — confusing.
+    const startPos = bundle.positions[ST.raceStart] ?? 0;
+    if (startPos > 0) {
+      markers.push({
+        time: bundle.dates[ST.raceStart],
+        position: "belowBar",
+        color: "rgba(0, 255, 159, 0.45)",   // half-opacity buy color
+        shape: "arrowUp",
+        text: "",
+      });
+    }
+
     for (const t of bundle.trades) {
-      if (t.entry_idx >= ST.raceStart && t.entry_idx <= idx) {
+      // Show entry only if the trade actually opened inside the race window.
+      const entryInWindow = t.entry_idx >= ST.raceStart && t.entry_idx <= idx;
+      if (entryInWindow) {
         markers.push({
           time: bundle.dates[t.entry_idx],
           position: "belowBar",
@@ -304,8 +321,10 @@ function highlightHeroDate(bundle, idx) {
           text: "",
         });
       }
-      if (t.exit_idx != null && t.exit_idx >= ST.raceStart &&
-          t.exit_idx <= idx && t.exit_date) {
+      // Show exit only if BOTH entry and exit are inside the race window.
+      // Otherwise we'd render an exit with no matching entry — exactly the
+      // "first marker is a red exit" bug the user observed.
+      if (entryInWindow && t.exit_idx != null && t.exit_idx <= idx && t.exit_date) {
         // Exit always shown in red regardless of trade P&L — color encodes
         // direction (entry = green up, exit = red down), not outcome.
         markers.push({
