@@ -222,10 +222,34 @@ select, input { font-family: inherit; }
 
 /* ─────────────── HERO CHART ─────────────── */
 
-.hero { grid-column: span 12; }
+/* Hero row: 8/4 split with stacked side panels */
+.hero-row {
+  grid-column: span 12;
+  display: grid;
+  grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+  gap: var(--gap, 14px);
+  align-items: stretch;
+}
+.hero-row .hero { min-width: 0; margin: 0; }
+.right-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap, 14px);
+  min-width: 0;
+}
+.right-stack > .panel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.right-stack > .panel .panel-header { flex: 0 0 auto; }
+.right-stack > .panel .gauge-body,
+.right-stack > .panel .votes-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
 .hero-chart {
   width: 100%;
-  height: 460px;
+  height: 370px;        /* was 460 (~20% shorter) */
   background: var(--bg-0);
   border-radius: 4px;
   position: relative;
@@ -396,8 +420,11 @@ select, input { font-family: inherit; }
 /* ─────────────── DECISION ROW ─────────────── */
 
 .signal-card { grid-column: span 3; }
-.gauge-card  { grid-column: span 3; }
-.votes-card  { grid-column: span 3; }
+/* gauge-card / votes-card are inside .right-stack now (flex children),
+   span declarations remain here as fallback for narrow viewports where
+   the hero-row collapses to a single column. */
+.gauge-card  { /* no grid-column inside .right-stack */ }
+.votes-card  { /* no grid-column inside .right-stack */ }
 
 .signal-body { display: flex; flex-direction: column; gap: 14px; }
 .signal-label {
@@ -542,7 +569,7 @@ select, input { font-family: inherit; }
 .vote-pred.hold { color: var(--hold); }
 .vote-pred.sell { color: var(--sell); }
 
-.reasons-card { grid-column: span 6; }
+.reasons-card { grid-column: span 3; }
 .reasons { list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .reasons li {
   display: grid;
@@ -605,32 +632,57 @@ select, input { font-family: inherit; }
   color: var(--txt-3);
   margin-top: 2px;
 }
+
+/* compact variant — used inside WHAT HAPPENED panel since the strategy
+   decision is the headline now and forward-price cells are footer info. */
+.outcome-grid.compact { gap: 6px; margin-top: 8px; margin-bottom: 0; }
+.outcome-grid.compact .outcome-cell {
+  padding: 5px 6px;
+  border-radius: 4px;
+}
+.outcome-grid.compact .outcome-cell label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  margin-bottom: 1px;
+}
+.outcome-grid.compact .outcome-cell b {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.outcome-grid.compact .outcome-cell small {
+  display: none;        /* drop the dollar price line in compact mode */
+}
 .outcome-cell.pos { border-color: var(--buy-dim); }
 .outcome-cell.pos b { color: var(--buy); }
 .outcome-cell.neg { border-color: var(--sell-dim); }
 .outcome-cell.neg b { color: var(--sell); }
 
 .strategy-decision {
-  background: var(--bg-2);
-  border-left: 3px solid var(--accent);
-  border-radius: 4px;
-  padding: 10px 14px;
-  margin-bottom: 8px;
+  background: linear-gradient(135deg,
+                              rgba(247,147,26,0.06)  0%,
+                              rgba(247,147,26,0.02) 100%);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .strategy-decision label {
   font-family: var(--mono);
-  font-size: 9px;
-  color: var(--txt-2);
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
+  font-weight: 600;
 }
 .strategy-decision b {
   font-family: var(--mono);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .strat-decision-text.enter { color: var(--buy);  text-shadow: 0 0 8px rgba(0,255,159,0.3); }
 .strat-decision-text.hold  { color: var(--accent); }
@@ -961,15 +1013,23 @@ select, input { font-family: inherit; }
 /* ─────────────── RESPONSIVE ─────────────── */
 
 @media (max-width: 1280px) {
-  .signal-card, .gauge-card, .votes-card { grid-column: span 6; }
-  .reasons-card, .outcome-card { grid-column: span 12; }
+  .signal-card { grid-column: span 12; }
+  .reasons-card { grid-column: span 6; }
+  .outcome-card { grid-column: span 6; }
+}
+@media (max-width: 1100px) {
+  .hero-row { grid-template-columns: 1fr; }
+  .right-stack { flex-direction: row; }
+  .right-stack > .panel { flex: 1; }
 }
 @media (max-width: 800px) {
   .topbar { flex-wrap: wrap; gap: 12px; }
   .config { margin-left: 0; }
-  .signal-card, .gauge-card, .votes-card { grid-column: span 12; }
+  .right-stack { flex-direction: column; }
+  .right-stack > .panel { flex: 1 1 auto; }
+  .reasons-card, .outcome-card, .signal-card { grid-column: span 12; }
   .lab-drawer { width: 100vw; }
-  .hero-chart { height: 320px; }
+  .hero-chart { height: 280px; }
 }
 
 /* ─────────────── UTILITY ─────────────── */

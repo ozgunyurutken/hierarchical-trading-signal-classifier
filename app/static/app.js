@@ -282,19 +282,51 @@ function renderHero(bundle) {
 }
 
 function highlightHeroDate(bundle, idx) {
-  // Two highlights at the selected date:
-  //   1) blue dot inside the candle (existing)
-  //   2) vertical line spanning the chart height (DOM overlay so we can use
-  //      a soft glow + gradient fade — LightweightCharts has no native
-  //      vertical-line primitive in the free build).
+  // Markers shown on the hero candle chart:
+  //   - the blue selected-date dot (always)
+  //   - if a portfolio race is in progress (raceStart >= 0), Buy ▲ /
+  //     Sell ▼ markers for every trade entry/exit between raceStart and
+  //     the current scrubber index. Pressing ▶ again later resets these
+  //     because raceStart shifts to the new start, so the filter window
+  //     naturally clears prior arrows.
+  // Plus a DOM-overlay vertical line at the selected date.
   const sel = bundle.dates[idx];
-  ST.hero.candle.setMarkers([{
-    time:  sel,
+
+  const markers = [];
+  if (ST.raceStart >= 0) {
+    for (const t of bundle.trades) {
+      if (t.entry_idx >= ST.raceStart && t.entry_idx <= idx) {
+        markers.push({
+          time: bundle.dates[t.entry_idx],
+          position: "belowBar",
+          color: COLORS.buy,
+          shape: "arrowUp",
+          text: "",
+        });
+      }
+      if (t.exit_idx != null && t.exit_idx >= ST.raceStart &&
+          t.exit_idx <= idx && t.exit_date) {
+        markers.push({
+          time: bundle.dates[t.exit_idx],
+          position: "aboveBar",
+          color: t.won ? COLORS.buy : COLORS.sell,
+          shape: "arrowDown",
+          text: "",
+        });
+      }
+    }
+  }
+  // Selected-date dot is always last and on top.
+  markers.push({
+    time: sel,
     position: "inBar",
     color: "#4d8aff",
     shape: "circle",
     text: "",
-  }]);
+  });
+  // LightweightCharts requires markers in chronological order.
+  markers.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0);
+  ST.hero.candle.setMarkers(markers);
 
   const vline = $("heroVLine");
   if (!vline || !ST.hero.chart) return;
@@ -303,7 +335,6 @@ function highlightHeroDate(bundle, idx) {
     vline.style.display = "none";
     return;
   }
-  // x is in CSS pixels relative to the chart's drawable area
   vline.style.left = x.toFixed(1) + "px";
   vline.style.display = "block";
 }
@@ -762,22 +793,35 @@ function drawGauge(svg, p) {
     { p: p.up    / total, color: "#00ff9f" },
   ];
 
-  // Background track (always full semicircle)
-  let html = `<path d="M 10 60 A 50 50 0 0 1 110 60"
+  // Background track (always full semicircle).
+  // sweep-flag = 0 → counter-clockwise from (10,60) to (110,60) which in
+  // SVG (y grows downward) traces the UPPER half-circle. sweep-flag = 1
+  // would draw the lower half, which is what the previous code did and is
+  // why the arcs were overflowing the panel.
+  let html = `<path d="M 10 60 A 50 50 0 0 0 110 60"
                 stroke="rgba(120,144,184,0.18)" stroke-width="9"
                 fill="none" stroke-linecap="butt" />`;
 
-  let a0 = Math.PI;  // start at 180° (left side of semicircle)
+  // We draw the upper half-circle, so y = cy - r·sin(angle), not cy + r·sin.
+  let a0 = 0;            // start at the LEFT end of the semicircle (angle 0
+                          // measured from +x axis going CCW; we'll flip Y)
+  // Conceptually: left end = 180°, right end = 0°. We'll iterate segments
+  // each consuming a fraction of π radians, walking from left to right.
+  // The path is described in SVG coords where Y is mirrored: we use
+  //   x = cx + r·cos(θ),  y = cy − r·sin(θ)
+  // and θ goes from π (left) down to 0 (right).
+  let theta = Math.PI;
   for (const s of segs) {
     const sweep = Math.min(s.p, 0.998) * Math.PI;
-    const a1 = a0 - sweep;
+    const theta1 = theta - sweep;
     if (s.p >= 0.005) {
-      const x0 = cx + r * Math.cos(a0), y0 = cy + r * Math.sin(a0);
-      const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-      html += `<path d="M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}"
+      const x0 = cx + r * Math.cos(theta),  y0 = cy - r * Math.sin(theta);
+      const x1 = cx + r * Math.cos(theta1), y1 = cy - r * Math.sin(theta1);
+      // sweep-flag = 0 (counter-clockwise) keeps the arc on the upper half.
+      html += `<path d="M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 0 0 ${x1.toFixed(2)} ${y1.toFixed(2)}"
                   stroke="${s.color}" stroke-width="9" fill="none" stroke-linecap="butt" />`;
     }
-    a0 = a1;  // always advance angle so next segment starts in the right place
+    theta = theta1;
   }
   svg.innerHTML = html;
 }
