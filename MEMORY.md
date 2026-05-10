@@ -1,10 +1,138 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** V5 Phase 5.1 + 5.2 + 4.6 + 3.6 (Overnight ablation experiments DONE), Phase 6 (FastAPI demo) sırada
-**Last Updated:** 2026-05-10 (gece 01:36) — 4 phase overnight experiment 1.7 saatte tamamlandı. **Asset-specific architecture finding: BTC=3-stage Full optimal, ETH=Flat optimal**
+**Active Phase:** V5 Phase 6.12 — Demo (FastAPI + Bloomberg-style live terminal) DONE; Phase 7 (IEEE paper) drafted
+**Last Updated:** 2026-05-10 — Web demo defalarca polishledi (12 alt-faz). Paper LaTeX hazır.
 **Active Branch:** `v5-from-scratch`
 **Pre-overnight tag:** `v5-pre-overnight-2026-05-09` (rollback için)
+**Latest commit:** `e876028 Phase 6.12 — Hero row: collapsible left-stack + persistent right-stack`
+
+## V5 Phase 6 — FastAPI Demo (Bloomberg-style live terminal)
+
+**Komple yeniden yazıldı**. V2 demo (joblib model load, basic dropdown predict) atıldı; V5 demo OOF CSV doğrudan okuyor (no on-the-fly inference) ve Bloomberg-style time-machine UI sunuyor.
+
+### Backend (`app/main.py`, ~927 satır)
+
+```
+GET  /                       static frontend
+GET  /health                  readiness + cache status
+GET  /assets                  metadata (assets, archs, rules, models, best per asset)
+GET  /test_dates/{asset}      chronological OOF dates
+GET  /predict                 query: asset, date, arch, model, rule -> signal+probs+context
+GET  /equity/{asset}          equity curve data
+GET  /timeline                timeline payload (legacy, used by older endpoints)
+GET  /explain                 16-feature breakdown + outcomes for a single date
+GET  /bundle                  MEGA payload (1.4 MB raw, ~300 KB gzip):
+                              dates, ohlc[5], regime, stage1[3], osc[6],
+                              active_signals, active_probs[3], votes[4 model x 4 fields],
+                              positions, equity, bh_equity, trades[], stats[7]
+POST /predict_custom         What-If Lab — 16-feature dict -> probs + pred_label
+                              Uses final-fit joblib bundles in app/models/v5/
+GET  /heatmap                Phase 5.1 ablation grid (32 cells + 2 B&H)
+```
+
+GZip middleware aktif. `_load_oof()` lazy-cached.
+
+### What-If Lab — Final-fit modeller
+
+`app/models/v5/` altında **32 joblib bundle** (BTC + ETH × 4 arch × 4 model). 48 saniyede fit edildi (`scripts/v5_save_final_models.py`, idempotent).
+
+⚠️ **Akademik dürüstlük:** Bu modeller **walk-forward DEĞİL**, tüm dataset'te full-fit. Demo'daki **What-If Lab paneli SADECE** bunları kullanır. Hero chart, signal panel, votes, equity, heatmap, outcomes, race — **hepsi walk-forward OOF** (paper-grade). UI'da disclaimer var: *"what-if uses a final-fit model trained on all data; backtest curves above remain walk-forward OOF"*.
+
+### Frontend (`app/static/{index.html, style.css, app.js}`)
+
+**Tema:** Dark trading terminal (Bloomberg-style). Neon mint buy / red sell. JetBrains Mono + Inter. CSS custom properties. CDN: lightweight-charts@4.2.0.
+
+**Nihai layout (Phase 6.12 sonrası):**
+```
+┌──┬─────────────┬─────────────────┬──────────┐
+│≡│ left-stack  │  HERO CHART     │ SIGNAL   │  ← row 1
+│STAGES│ S1/S2/Votes (collapsible)│          │  collapse via vertical
+│ │ default = collapsed           │ WHY THIS │  "STAGES" bar
+│ │             │                  │ SIGNAL   │
+└──┴─────────────┴─────────────────┴──────────┘
+┌──────────────────────────────────────────────┐
+│ Scrubber THIN (28px, no mini-equity)         │  ← row 2
+└──────────────────────────────────────────────┘
+┌──────────────────────┬──────────────────────┐
+│ Portfolio Race (6)   │ What Happened (6)    │  ← row 3
+│  vs B&H normalized   │  STRATEGY DECISION   │
+│  (vanilla canvas)    │  trade sim           │
+│                      │  5/10/30d compact    │
+└──────────────────────┴──────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Heatmap (collapsed default, click to expand) │  ← row 4
+└──────────────────────────────────────────────┘
+```
+
+### Phase 6.x Polish Iterations (Demo'nun bug + UX iyileştirme zinciri)
+
+| Sub-phase | Commit | İçerik |
+|---|---|---|
+| 6.0 | 4eb1443 | İlk V5 backend rewrite + Docker bundle update + Phase 5.3 ROC-AUC |
+| 6.1 | 60be64d | Interactive trade timeline (eski version, sonra rewrite) |
+| 6.2 | 1565207 | **Bloomberg time-machine** sıfırdan rewrite — hero candlestick + scrubber + Lab Mode + heatmap |
+| 6.3 | 8c90caf | Hero chart 358 marker karmaşası temizlendi; Lab toggle Actual↔Custom tutarlılığı |
+| 6.4 | da12c4f | Portfolio race chart (Strategy vs B&H, normalize on Play start) |
+| 6.5 | 0414437 | Race chart 240→150px; Chart.js options refine |
+| 6.6 | adb1007 | Race chart **vanilla canvas** (Chart.js drop) — scroll jank gitti |
+| 6.7 | 2a648ff | Vertical line + Lab toggle hide + oscillator descriptions + gauge fix v1 |
+| 6.8 | 024404f | Gauge sweep-flag fix + live trade markers + 8/4 split + What Happened reorder |
+| 6.9 | a5525cb | Right-stack scaling + thin scrubber + new row order; exit marker hep kırmızı |
+| 6.10 | 519cdf6 | Race start'ta orphan exit marker bug (entry filter mismatch) — ghost entry eklendi |
+| 6.11 | a7dffcf | Hover tooltip (entry/exit dates + realized P&L) |
+| 6.12 | e876028 | **Hero-row redesign**: collapsible left-stack (gauges/votes) + persistent right-stack (signal/reasons) |
+
+### Hero Marker Convention (Final, Phase 6.10+)
+
+- **▲ Yeşil arrow below bar** → Buy entry (race window içinde)
+- **▼ Kırmızı arrow above bar** → Sell exit (race window içinde, won/lost ayrımı yok)
+- **Yarı-saydam ▲** → raceStart'ta zaten açık pozisyon vardı ("ghost entry")
+- **Mavi nokta inBar + dikey gradient çizgi** → seçili tarih (scrubber pozisyonu)
+- Hover tooltip: entry tarihinde ENTRY popover, exit tarihinde EXIT popover (date/price/realized P&L/held days)
+
+### Reference Files
+
+- `app/main.py` (~927 satır) — backend
+- `app/static/index.html` (~270 satır) — terminal UI iskeleti
+- `app/static/style.css` (~1100 satır) — dark theme
+- `app/static/app.js` (~1300 satır) — vanilla JS, lightweight-charts hero, vanilla canvas race, lab
+- `app/models/v5/*.joblib` (32 dosya, ~52MB) — final-fit What-If models
+- `scripts/v5_save_final_models.py` — bundle generator
+- `docker/Dockerfile` — Python 3.11-slim + V5 OOF + reports/Phase5.1 equity bundle
+- `docs/legacy_ui/*.bak` — eski V2 frontend arşivi
+- `docs/HANDOFF_2026-05-10_web-demo-redesign.md` — Phase 6.2 öncesi handoff
+
+---
+
+## V5 Phase 7 — IEEE Paper
+
+**Status:** Draft tamamlandı. Markdown öncül + LaTeX nihai versiyon yan tarafta paralel session'da revize ediliyor.
+
+### Files
+
+- `docs/PAPER.md` — Markdown ilk taslak (Phase 7, commit a3ddb00). 6 section + 24 IEEE references.
+- `docs/paper/paper.tex` + `paper.bbl` + `references.bib` — LaTeX kaynak (commit 4251575, başka session)
+- `docs/paper/paper.pdf` — derlenmiş PDF (~4.3 MB, commit 1565207)
+- `docs/paper/figures/` — 7 figure: arch_equity, arch_heatmap, eng_demo, stage1_confusion, stage1_truth_vs_pred_btc, stage2_fsm, zigzag_lookahead
+
+### Sections (Markdown taslak)
+
+1. Abstract (BTC Sharpe 1.15, ETH Return +19% vs B&H -7%, asset-specific architecture finding)
+2. Introduction with Literature Review (24 IEEE refs, 5 tematik sub-section)
+3. Materials and Methods (dataset, mathematical formulation, model description, ZigZag, oscillators)
+4. Experimental Setup (walk-forward, Optuna 5-fold inner CV, search spaces, metrics)
+5. Results (Stage 1 + Stage 3 + arch ablation + trading rule + meta-overfit case + k threshold)
+6. Discussion (frame-vs-trade, no-free-lunch architecture, FSM rationale, limitations, future work)
+7. Conclusion (3 stand-out findings)
+
+### Phase 5.3 — ROC-AUC (paper'a girdi)
+
+`scripts/v5_compute_roc_auc.py` — multiclass one-vs-rest. BTC best macro AUC 0.533 (2stage_macro/xgb), ETH 0.533 (2stage_trend/xgb). Tüm 32 config 0.49-0.53 — chance üstü marjinal. Combined with F1m=0.37 ve Sharpe=1.15 → "weak class ranking, but Hold-aware trading rule rescues trade quality" (paper Discussion key argument).
+
+`reports/Phase5.3_roc_auc/v5_p5_stage3_roc_auc.csv` + `v5_p5_stage3_roc_curves.png`
+
+---
 
 ## V5 Phase 5.1 — Architecture Ablation (Overnight, 2026-05-10)
 
