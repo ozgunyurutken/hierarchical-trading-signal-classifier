@@ -55,6 +55,8 @@ const ST = {
   playerHandle: null,
   hero: {chart: null, candle: null, volume: null, regime: null, marker: null},
   miniCanvas: null,
+  raceChart: null,
+  raceStart: -1,         // index from which the portfolio race is computed (set on Play)
   labOpen: false,
   labMode: "actual",   // "actual" | "custom"
   labFeatures: {},     // current slider values (Custom mode)
@@ -76,7 +78,12 @@ async function init() {
   // Scrubber
   $("scrubber").addEventListener("input", (e) => seek(parseInt(e.target.value, 10)));
   $("playBtn").addEventListener("click", togglePlay);
-  $("resetBtn").addEventListener("click", () => seek(ST.bundle ? ST.bundle.n - 1 : 0));
+  $("resetBtn").addEventListener("click", () => {
+    // Reset clears the race AND jumps to most-recent date.
+    ST.raceStart = -1;
+    resetRaceChart();
+    seek(ST.bundle ? ST.bundle.n - 1 : 0);
+  });
   document.querySelectorAll(".speed-btn").forEach(b =>
     b.addEventListener("click", () => setSpeed(parseInt(b.dataset.speed, 10))));
 
@@ -89,6 +96,7 @@ async function init() {
   $("labRandom").addEventListener("click", labRandomize);
 
   buildHeroChart();
+  buildRaceChart();
   await loadHeatmap();
   await loadBundle();
 }
@@ -107,6 +115,10 @@ async function loadBundle() {
   ST.model = $("model").value;
   ST.rule  = $("rule").value;
   ST.idx   = -1;
+  // Reset race when underlying (asset, arch, model, rule) changes — race only
+  // makes sense within a single configuration.
+  ST.raceStart = -1;
+  resetRaceChart();
   setStatus("LOADING…");
 
   const u = new URL("/bundle", window.location.origin);
@@ -320,8 +332,19 @@ function setSpeed(speed) {
 }
 
 function togglePlay() {
-  if (ST.playing) stopPlay();
-  else startPlay();
+  if (ST.playing) {
+    stopPlay();
+  } else {
+    // Pressing Play kicks off a fresh portfolio race from the current date.
+    // (setSpeed uses stop+start internally and must NOT reset the race —
+    //  hence raceStart is set here rather than inside startPlay.)
+    if (ST.bundle) {
+      ST.raceStart = ST.idx;
+      resetRaceChart();
+      updateRaceChart(ST.bundle, ST.idx);  // initial point at 0%
+    }
+    startPlay();
+  }
 }
 
 function startPlay() {
@@ -374,6 +397,140 @@ function refreshAll() {
   if (ST.labOpen && ST.labMode === "actual") syncLabFromActual();
   // If lab is open and 'custom', re-run custom inference (date doesn't matter for inference but the from-arrow shows actual)
   if (ST.labOpen) updateLabFromArrow(b, i);
+
+  // Portfolio race chart — only active when a race has been started (Play pressed)
+  updateRaceChart(b, i);
+}
+
+// ───────────────────────── Portfolio race ─────────────────────────
+function buildRaceChart() {
+  const ctx = $("raceChart").getContext("2d");
+  ST.raceChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: "Strategy",
+          data: [],
+          borderColor: COLORS.buy,
+          backgroundColor: "rgba(0, 255, 159, 0.10)",
+          borderWidth: 2,
+          fill: true,
+          pointRadius: 0,
+          tension: 0,
+        },
+        {
+          label: "Buy & Hold",
+          data: [],
+          borderColor: COLORS.txt1 || "#b3bfd6",
+          borderWidth: 1.5,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          tension: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: {
+          ticks:   { color: "#6b7895", maxTicksLimit: 8, font: { family: "JetBrains Mono", size: 10 } },
+          grid:    { color: "rgba(120,144,184,0.10)" },
+          border:  { color: "rgba(120,144,184,0.25)" },
+        },
+        y: {
+          ticks: {
+            color: "#6b7895",
+            font: { family: "JetBrains Mono", size: 10 },
+            callback: (v) => (v >= 0 ? "+" : "") + v.toFixed(0) + "%",
+          },
+          grid:   { color: "rgba(120,144,184,0.10)" },
+          border: { color: "rgba(120,144,184,0.25)" },
+        },
+      },
+      plugins: {
+        legend: {
+          position: "top",
+          align: "end",
+          labels: {
+            color: "#b3bfd6",
+            font: { family: "Inter", size: 11, weight: "500" },
+            boxWidth: 18, boxHeight: 2,
+          },
+        },
+        tooltip: {
+          backgroundColor: "rgba(6, 9, 15, 0.95)",
+          borderColor: "rgba(120, 144, 184, 0.30)",
+          borderWidth: 1,
+          titleColor: "#e6ecfa",
+          bodyColor: "#b3bfd6",
+          titleFont: { family: "JetBrains Mono", size: 11 },
+          bodyFont:  { family: "JetBrains Mono", size: 11 },
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${(ctx.parsed.y >= 0 ? "+" : "")}${ctx.parsed.y.toFixed(2)}%`,
+          },
+        },
+      },
+    },
+  });
+}
+
+function resetRaceChart() {
+  if (!ST.raceChart) return;
+  ST.raceChart.data.labels = [];
+  ST.raceChart.data.datasets[0].data = [];
+  ST.raceChart.data.datasets[1].data = [];
+  ST.raceChart.update("none");
+  $("raceStartLabel").textContent = "— press ▶ to start a race —";
+  $("raceStrategyPill").textContent = "Strategy 0.00%";
+  $("raceBHPill").textContent       = "B&H 0.00%";
+  setRaceEdgePill(0);
+}
+
+function setRaceEdgePill(edge) {
+  const el = $("raceEdgePill");
+  el.textContent = `Edge ${edge >= 0 ? "+" : ""}${edge.toFixed(2)}pp`;
+  el.classList.remove("positive", "negative");
+  if (edge >  0.005) el.classList.add("positive");
+  if (edge < -0.005) el.classList.add("negative");
+}
+
+function updateRaceChart(b, i) {
+  if (!ST.raceChart || !b) return;
+  const start = ST.raceStart;
+
+  // No race yet, or scrubber moved before race start: keep race chart blank.
+  if (start < 0 || i < start) {
+    if (ST.raceChart.data.labels.length > 0) resetRaceChart();
+    return;
+  }
+
+  const stratBase = b.equity[start];
+  const bhBase    = b.bh_equity[start];
+  if (!stratBase || !bhBase) return;
+
+  const lab      = b.dates.slice(start, i + 1);
+  const stratPct = b.equity.slice(start, i + 1).map(v => (v / stratBase - 1) * 100);
+  const bhPct    = b.bh_equity.slice(start, i + 1).map(v => (v / bhBase - 1) * 100);
+
+  ST.raceChart.data.labels             = lab;
+  ST.raceChart.data.datasets[0].data   = stratPct;
+  ST.raceChart.data.datasets[1].data   = bhPct;
+  ST.raceChart.update("none");
+
+  const lastS = stratPct[stratPct.length - 1] ?? 0;
+  const lastB = bhPct[bhPct.length - 1]       ?? 0;
+  const edge  = lastS - lastB;
+  const days  = i - start;
+  $("raceStartLabel").textContent =
+    `Race since ${b.dates[start]} · ${days} day${days === 1 ? "" : "s"}`;
+  $("raceStrategyPill").textContent = `Strategy ${lastS >= 0 ? "+" : ""}${lastS.toFixed(2)}%`;
+  $("raceBHPill").textContent       = `B&H ${lastB >= 0 ? "+" : ""}${lastB.toFixed(2)}%`;
+  setRaceEdgePill(edge);
 }
 
 function updateSignal(b, i) {

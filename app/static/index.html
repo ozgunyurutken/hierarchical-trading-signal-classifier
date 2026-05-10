@@ -87,6 +87,20 @@
       <div id="heroChart" class="hero-chart"></div>
     </section>
 
+    <!-- PORTFOLIO RACE -->
+    <section class="panel race">
+      <div class="panel-header">
+        <h2>PORTFOLIO RACE — STAGE 3 vs BUY &amp; HOLD</h2>
+        <div class="panel-subtitle">
+          <span class="legend-pill" id="raceStartLabel">— press ▶ to start a race —</span>
+          <span class="legend-pill race-strat" id="raceStrategyPill">Strategy 0.00%</span>
+          <span class="legend-pill race-bh" id="raceBHPill">B&amp;H 0.00%</span>
+          <span class="legend-pill race-edge" id="raceEdgePill">Edge 0.00pp</span>
+        </div>
+      </div>
+      <canvas id="raceChart" class="race-chart"></canvas>
+    </section>
+
     <!-- TIMELINE SCRUBBER -->
     <section class="panel scrubber">
       <div class="scrubber-row">
@@ -97,7 +111,7 @@
             <button class="speed-btn" data-speed="3">3×</button>
             <button class="speed-btn" data-speed="6">6×</button>
           </div>
-          <button class="reset-btn" id="resetBtn" title="Reset to latest">⟲</button>
+          <button class="reset-btn" id="resetBtn" title="Reset race + jump to latest">⟲</button>
         </div>
 
         <div class="scrubber-track-wrap">
