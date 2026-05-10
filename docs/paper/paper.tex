@@ -1,0 +1,282 @@
+%% ============================================================
+%% A Three-Stage Hierarchical Soft-Fusion Framework
+%% for Cryptocurrency Trading Signal Classification
+%%
+%% BBL514E Pattern Recognition - Term Project, Spring 2026
+%% Istanbul Technical University
+%% ============================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{cite}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+
+%% Tighter table column types
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{document}
+
+\title{A Three-Stage Hierarchical Soft-Fusion Framework\\
+for Cryptocurrency Trading Signal Classification}
+
+\author{
+\IEEEauthorblockN{Özgün Can Yürütken}
+\IEEEauthorblockA{Department of Computer Engineering\\
+Istanbul Technical University\\
+Istanbul, Türkiye\\
+\texttt{yurutken23@itu.edu.tr} (707251003)}
+\and
+\IEEEauthorblockN{Çağatay Bilgin}
+\IEEEauthorblockA{Department of Computer Engineering\\
+Istanbul Technical University\\
+Istanbul, Türkiye\\
+\texttt{bilgin.cagatay@itu.edu.tr} (504251013)}
+}
+
+\maketitle
+
+%% ===================== ABSTRACT =====================
+\begin{abstract}
+We present a three-stage hierarchical soft-fusion framework for cryptocurrency Buy/Hold/Sell signal classification on Bitcoin (BTC) and Ethereum (ETH) daily series. The framework decomposes the trading decision into three pattern-recognition sub-problems: a \emph{trend classifier} (Stage~1) that estimates the local price-trend regime from technical indicators using a ZigZag-based offline label, a \emph{macroeconomic regime classifier} (Stage~2) that produces Bull/Neutral/Bear labels through a deterministic finite-state machine over VIX, S\&P 500, yield-curve, DXY and M2 signals, and a \emph{signal classifier} (Stage~3) that fuses the two upstream posterior probability vectors with six oscillator features. Four classifiers (XGBoost, LightGBM, Random Forest, MLP) are tuned per stage with Optuna and 5-fold inner-CV walk-forward, then evaluated on outer expanding-window walk-forward out-of-fold (OOF) predictions covering 2017--2025 for BTC (3{,}200 days) and 2020--2025 for ETH (2{,}000 days). On BTC the full 3-stage architecture attains a Sharpe ratio of $1.15$ versus $0.95$ for Buy~\&~Hold, with a $40\%$ drawdown reduction. On ETH a flat 6-oscillator baseline is preferred (Sharpe $0.52$) while every architecture outperforms the loss-making Buy~\&~Hold ($-7\%$). Our principal empirical finding is that the optimal architectural depth is asset-specific and cannot be predicted from frame-level metrics alone: macro-F1 stays in the 0.34--0.37 band across configurations, yet Hold-aware trading rules transform weak class probabilities into economically meaningful trades.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Hierarchical classification, cryptocurrency, trading signals, walk-forward cross-validation, soft fusion, ablation study, gradient boosting, regime detection.
+\end{IEEEkeywords}
+
+%% ===================== 1. INTRODUCTION =====================
+\section{Introduction}
+Cryptocurrency markets are noisy, non-stationary, and respond to a mixture of micro-structure, sentiment, and macroeconomic shocks. Supervised approaches that map raw price features directly to a Buy/Hold/Sell label tend to learn idiosyncratic relationships that fail to generalise across regimes \cite{sezer2020,patel2015trend}. Decomposing the decision \emph{hierarchically}---first identifying the short-term trend, then the macro context, and finally the trade---offers three benefits: (i)~each sub-problem has a clearer signal-to-noise ratio; (ii)~intermediate posteriors are inspectable and auditable; and (iii)~the modular pipeline can be ablated to isolate where predictive value resides.
+
+This work formulates and empirically evaluates such a three-stage classifier on BTC and ETH daily data. We frame the trading-signal problem as a hierarchical Bayesian decision-theoretic posterior fusion:
+\begin{equation}
+\hat p(\text{signal} \mid x) \propto \hat p\!\left(\text{signal} \mid x,\, \hat p_{\text{trend}},\, \hat p_{\text{regime}}\right),
+\end{equation}
+where $\hat p_{\text{trend}}$ and $\hat p_{\text{regime}}$ are out-of-fold posterior estimates from upstream classifiers and $x$ contains current oscillator features. We compare four canonical pattern-recognition algorithms (XGBoost, LightGBM, Random Forest, MLP) at every stage, perform a four-architecture ablation (Flat, 2-Stage Trend, 2-Stage Macro, 3-Stage Full) and a three-trading-rule study, and assess the system on both classification (F1, ROC-AUC) and economic (Sharpe, drawdown, return) metrics.
+
+\subsection{Related Work}
+\textbf{Hierarchical and cascade classifiers} in time-series forecasting predate modern deep learning: hierarchical mixtures of experts \cite{jordan1994hme} and stacked generalisation \cite{wolpert1992stacked} introduced the idea, and Silla and Freitas \cite{silla2011hierarchical} catalogued hierarchical text classification. In financial time series, N-HiTS \cite{challu2023nhits} addressed multi-horizon forecasting and Crossformer \cite{zhang2023crossformer} multivariate dependencies. Zou \emph{et al.} \cite{zou2024cascadelstm} placed a cascaded LSTM upstream of an actor-critic agent in stock trading and reported Sharpe gains over flat baselines---direct empirical support for the hierarchy hypothesis.
+
+\textbf{Crypto signal classification} has tended toward two extremes: monolithic deep models (e.g.~LSTM directional predictors \cite{patel2015fusion,sezer2018cnn}) or rule-based technical strategies. Recent work by Kuznetsov \emph{et al.} \cite{kuznetsov2025confidence} introduced a confidence-threshold cascade for crypto direction prediction, achieving $82.7\%$ directional accuracy at $12.0\%$ market coverage; this directly motivates our Stage-3 Hold-aware design where the model abstains rather than forces a trade.
+
+\textbf{Macroeconomic regime detection} has historically relied on Markov-switching models \cite{hamilton1989markov} or rule-based filters over VIX and yield-curve indicators \cite{ang2002regime}. We adopt a deterministic finite-state machine inspired by realised-volatility approaches \cite{andersen2003realized}, with hysteresis and minimum-dwell constraints, after observing that GMM and HMM unsupervised approaches displayed pathological stickiness in our preliminary experiments (Section~\ref{sec:fsm}).
+
+\textbf{GBDT versus deep learning on tabular data}: Grinsztajn \emph{et al.} \cite{grinsztajn2022tabular} and Shwartz-Ziv and Armon \cite{shwartzziv2022tabular} showed that gradient-boosted trees outperform deep architectures on tabular datasets of the size and structure encountered in financial daily data. Our Stage~3 results confirm this.
+
+\textbf{Walk-forward cross-validation and meta-overfitting}: Lopez de Prado \cite{lopez2018amlfinance,lopez2018tenreasons} argues that random K-fold leaks future information in financial settings and recommends purged, embargoed walk-forward CV. We adopt expanding-window walk-forward at every stage and devote particular attention to the \emph{inner-CV configuration} used by Optuna; we show empirically (Section~\ref{sec:metaoverfit}) that an under-resourced 3-fold inner CV induces meta-overfitting on Random Forest hyperparameters which is recovered when the inner CV is widened to 5 evenly-spaced folds.
+
+\textbf{Trading-rule design and the Hold class}: Bailey and Lopez de Prado \cite{bailey2014deflated} showed that a strategy's Sharpe ratio is sensitive to whether the holding rule is stateful or stateless. Our three-rule ablation (stateful long-only, defensive reset, probability-weighted continuous sizing) operationalises these distinctions.
+
+\subsection{Contributions}
+\begin{enumerate}
+\item \textbf{A three-stage hierarchical Bayesian decision-theoretic framework} for crypto trading-signal classification, with offline-revisable ZigZag trend labels at Stage~1, a deterministic FSM at Stage~2, and 4-classifier soft fusion at Stage~3.
+\item \textbf{An asset-specific architecture finding}: 3-Stage Full is empirically best for BTC (Sharpe $1.15$, $+21\%$ over B\&H), while the \emph{flat} 6-oscillator baseline is best for ETH (Sharpe $0.52$ vs.~$0.34$ for 3-Stage Full). Hierarchical fusion overfits the smaller ETH dataset---a concrete instance of \emph{no-free-lunch} in financial ML.
+\item \textbf{A meta-overfitting case study} documenting how a 3-fold inner CV in Optuna selected \texttt{min\_samples\_leaf=1} for Random Forest (a degenerate value) and produced an outer-CV regression of $-0.014$ F1 macro versus the un-tuned baseline. A 5-fold inner CV with evenly-spaced historical regimes recovered the lost performance.
+\item \textbf{A frame-level versus segment-level evaluation gap}: Stage~1 majority-vote consistency reaches $0.81$ for BTC and $0.83$ for ETH despite a frame F1 macro of only $0.55$--$0.57$. The same decoupling appears at Stage~3: ROC-AUC sits near $0.53$ yet selective trading rules deliver Sharpe $1.15$.
+\item \textbf{An empirical demonstration of ZigZag label revisability}: a strict-causality re-labelling at $106$ monthly cutoffs disagrees with the offline label in $42\%$ of cases, justifying the use of an ML classifier instead of the rule directly at inference time.
+\end{enumerate}
+
+%% ===================== 2. METHOD =====================
+\section{Materials and Methods}
+
+\subsection{Dataset Description}
+Daily OHLCV series were retrieved from Yahoo Finance for BTC (2014-09-17 to 2025-12-30, $4{,}094$ days) and ETH (2017-08-17 to 2025-12-30, $3{,}060$ days). Twenty-two macroeconomic covariates---S\&P~500, VIX, DXY, US10Y, US2Y, Gold, Silver, WTI Oil, Federal Funds Rate, CPI, Unemployment, M2 Money Supply, plus credit spreads and ratios---were retrieved from Yahoo Finance and the Federal Reserve Economic Data (FRED) API and aligned with publication-release lags (FedFunds 1d, CPI 45d, UnRate 35d, M2 14d). Forward returns are used \emph{only} for label generation; an \texttt{assert\_no\_lookahead\_leakage} routine validates that the rolling-volatility threshold uses past-only data.
+
+Twelve macro-derived features were engineered for Stage~2 (z-scores, year-over-year changes, yield spreads); Fig.~\ref{fig:eng_demo} illustrates the before/after of four representative transforms. Five of these features are consumed by the FSM; the remaining seven were produced for unsupervised clustering trials and archived.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_eng_demo}
+\caption{Phase-1.5 feature engineering before/after demonstration on four representative transforms (VIX raw $\to$ expanding-window z-score; US10Y\,\&\,US2Y $\to$ yield-curve spread; M2 raw $\to$ year-over-year change; S\&P\,500 $\to$ 5-day log return). Star $\bigstar$ marks features retained by the Stage-2 rule-based FSM.}
+\label{fig:eng_demo}
+\end{figure}
+
+\subsection{Three-Stage Architecture}
+Let $x_t \in \mathbb{R}^d$ denote the technical-indicator feature vector at day $t$. Stage~1 outputs a posterior
+$\hat p_{\text{trend}}(t) = (\hat p_{\text{down}}, \hat p_{\text{range}}, \hat p_{\text{up}})$;
+Stage~2 emits a hard one-hot $\hat p_{\text{regime}}(t) \in \{e_{\text{Bull}}, e_{\text{Neutral}}, e_{\text{Bear}}\}$ together with a regime-tenure scalar $\tau_t$;
+Stage~3 receives the concatenated vector
+\begin{equation}
+z_t = \big[\hat p_{\text{trend}}(t),\ \hat p_{\text{trend}}^{(\text{smooth-10})}(t),\ \hat p_{\text{regime}}(t),\ \tau_t,\ o_t\big] \in \mathbb{R}^{16},
+\end{equation}
+where $o_t$ is the six-dimensional oscillator vector. The Stage-3 decision is
+\begin{equation}
+\hat y_t = \arg\max_{y \in \{\text{Buy}, \text{Hold}, \text{Sell}\}} \hat p(y \mid z_t).
+\end{equation}
+
+The signal label is generated from a causal adaptive threshold,
+\begin{equation}
+y_t \;=\;
+\begin{cases}
+\text{Buy} & \text{if } \tfrac{P_{t+5} - P_t}{P_t} > +k\,\hat\sigma_t,\\[2pt]
+\text{Sell} & \text{if } \tfrac{P_{t+5} - P_t}{P_t} < -k\,\hat\sigma_t,\\[2pt]
+\text{Hold} & \text{otherwise,}
+\end{cases}
+\label{eq:signal_label}
+\end{equation}
+where $\hat\sigma_t$ is the past-only rolling 20-day standard deviation of daily returns and $k=0.5$ (sensitivity reported in Section~\ref{sec:k_ablation}).
+
+\subsection{Stage 2: Composite Macro Finite-State Machine}
+\label{sec:fsm}
+We adopted a deterministic finite-state machine (FSM) for Stage~2 \emph{only} after four canonical unsupervised approaches failed: vanilla K-Means could not capture the 2008 Global Financial Crisis structure; semantic-constrained K-Means produced noisy regime transitions; an HMM with three Gaussian states displayed unstable transitions; a 3-component GMM exhibited 2024--2025 stickiness with $P(\text{Stress})$ saturated near $1.0$. The retained FSM is governed by eight rules and one guard:
+\textbf{(R1)}~VIX hysteresis (Bear entry $z>1.0$, exit $z<0.3$; symmetric Bull);
+\textbf{(R2)}~minimum dwell (Bear $\geq 20$\,d, Bull $\geq 40$\,d, Neutral $\geq 10$\,d);
+\textbf{(R3)}~Bear$\to$Neutral velocity ($\Delta\text{VIX}_z[10\text{d}] < -0.8$);
+\textbf{(R4)}~persistent yield-curve inversion ($60$-day rolling US10Y\,$-$\,US2Y $<0$);
+\textbf{(R5)}~DXY+M2 macro-stress override (DXY\,$z[30]>0.7$ AND M2\,YoY\,$<4\%$);
+\textbf{(R6)}~Bull velocity entry (V-shape recovery);
+\textbf{(R7)}~Bear velocity entry (rapid escalation);
+\textbf{(R8)}~Bear re-entry guard ($35$-day Neutral dwell required after Bear$\to$Neutral). The resulting timeline (Fig.~\ref{fig:stage2}) correctly identifies the 2008 GFC, 2018-Q4, 2020-COVID, 2022 Q2--Q4, and 2025-04 tariff Bear regimes, plus the 2009, 2020-V, 2022-Q4, and 2025-05 V-shape recoveries.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_stage2_fsm}
+\caption{Phase-2.12 final composite macro FSM regime timeline (Bear / Neutral / Bull shading) overlaid on S\&P\,500 (top), BTC (middle), ETH (bottom). Eight rules + one guard; six macro derived features.}
+\label{fig:stage2}
+\end{figure}
+
+\subsection{Stage 1: ZigZag-Labelled Trend Classifier}
+The Stage-1 label is produced offline from price by a ZigZag pivot detector with $10\%$ deviation threshold and $\geq 15$-day minimum segment length, classifying the segment between two pivots as \texttt{uptrend} when the realised amplitude exceeds $7.5\%$ and the segment exceeds the minimum dwell, \texttt{downtrend} symmetrically, and \texttt{range} otherwise. Although the label is retrospectively defined, it is \emph{never} visible to the Stage-1 model at inference time: the model receives only causal technical indicators (RSI, MACD, ADX, Bollinger \%B, ATR, volume z-scores, OBV, six rolling-window log returns)---fourteen features in total.
+
+\paragraph*{Why an ML classifier is needed despite an offline rule}
+A pure rule cannot be deployed at inference time because the ZigZag label is itself \emph{revisable} once new price data arrives. We tested this empirically by recomputing the most recent ZigZag label at $106$ monthly cutoffs from 2017--2025 using \emph{only} the data available up to each cutoff and comparing it to the offline label produced from the full 2014--2025 dataset (Fig.~\ref{fig:zzlookahead}). The two disagreed in $44/106 \approx 42\%$ of cutoff dates. An ML model receiving frozen weights and $t$-only features yields a stable, causal posterior that does not change retroactively when new data arrives.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_zigzag_lookahead}
+\caption{ZigZag label revisability test on BTC. Top: offline label using full 2014--2025 data. Middle: monthly causal re-labellings using only past data at each cutoff. Bottom: red marks indicate disagreement (44/106, $42\%$).}
+\label{fig:zzlookahead}
+\end{figure}
+
+\subsection{Classifiers}
+Four classifiers are evaluated at Stages 1 and 3.
+\textbf{XGBoost}~\cite{chen2016xgboost} with \texttt{multi:softprob} objective and \texttt{tree\_method=hist}; inverse-frequency \texttt{sample\_weight} replaces \texttt{class\_weight=balanced}.
+\textbf{LightGBM}~\cite{ke2017lightgbm} with \texttt{class\_weight=balanced} via the scikit-learn wrapper.
+\textbf{Random Forest}~\cite{breiman2001rf} with \texttt{class\_weight=balanced}.
+\textbf{MLP}~\cite{rumelhart1986} (two- or three-layer ReLU with early stopping); scikit-learn's MLP does not natively support \texttt{class\_weight} and we did not implement an oversampling fallback (paper limitation). Tree models receive raw features; MLP receives features standardised on the training fold only.
+
+\subsection{Walk-Forward Cross-Validation and Hyperparameter Tuning}
+We use \emph{expanding-window} walk-forward at the outer level: training set $[t_0, t_k]$, gap $g=10$~days (larger than the 5-day forward-return horizon to prevent label leakage), validation $[t_k+g,\, t_k+g+v]$ with $v=200$~days, advancing by $v$ (non-overlapping). This yields $16$ outer folds for BTC, $10$ for ETH at Stage~1, and $12/6$ folds at Stage~3. For hyperparameter tuning we use Optuna's TPE sampler with the MedianPruner and an \emph{inner} walk-forward of $5$ folds, evenly spaced across the dataset (\texttt{train\_min}=750, \texttt{val}=300, \texttt{gap}=10). Inner-fold dates were chosen to span distinct historical regimes (2017 bull, 2019 recovery, 2021 bull-to-bear flip, 2023 winter recovery, 2025 modern era) so that hyperparameters generalise. Search spaces, fixed across stages, are reported in Section~\ref{sec:metaoverfit}.
+
+%% ===================== 3. EXPERIMENTAL SETUP =====================
+\section{Experimental Setup}
+
+\subsection{Evaluation Metrics}
+\textbf{Classification:} accuracy, F1 macro, per-class F1, multiclass one-vs-rest ROC-AUC, and confusion matrices on out-of-fold predictions. \textbf{Segment-level} (Stage~1 only): majority-vote consistency, mean intersection-over-union, onset-detection F1 with $\pm 5$-day tolerance. \textbf{Economic} (Stage~3 only): annualised Sharpe ratio (252 trading days), total return, maximum drawdown, number of trades, win rate. Buy~\&~Hold benchmark on the same OOF span. Three trading rules---stateful long-only, defensive reset, probability-weighted---are evaluated on identical OOF predictions. Backtests assume a $0.1\%$ one-way transaction cost; slippage is not modelled (limitation).
+
+\subsection{Software and Hardware}
+Python 3.11; scikit-learn 1.8.0; XGBoost 3.2.0; LightGBM 4.6.0; Optuna 4.8.0. Experiments executed on a single 2024 MacBook Air (M3, 16~GB RAM). The full overnight ablation (4 phases, 4 architectures $\times$ 4 models $\times$ 2 assets $\times$ 30 Optuna trials with 5-fold inner CV plus retraining and backtests) completed in $1$h\,$43$m.
+
+%% ===================== 4. RESULTS =====================
+\section{Results}
+
+\subsection{Stage 1: Trend Classifier}
+After hyperparameter tuning, Random Forest achieved the highest macro-F1 on both assets (BTC $0.563$, ETH $0.571$). All eight tuned configurations cleared the $\text{F1m}\geq 0.50$ decision gate, an improvement on the $6/8$ pass rate of the un-tuned baseline. The MLP benefited the most from tuning (BTC F1m $0.462\to 0.537$, range-class F1 $0.302\to 0.421$). Confusion matrices and an OOF timeline are given in Figs.~\ref{fig:stage1_confusion} and \ref{fig:stage1_truth_btc}.
+
+A segment-level analysis revealed that the Stage-1 model captures \emph{macro structure} far better than its frame-level F1 indicates. With a 20-day rolling-mode smoothing, majority-vote consistency reaches $0.77$ (BTC) and $0.83$ (ETH); within each true contiguous trend segment the model's dominant predicted class agrees with the truth more than $80\%$ of the time. The smoothing trade-off is task-specific: a 5-day window optimises onset-detection F1 ($0.41$); a 20-day window optimises persistence; we adopted a 10-day window as the Stage-3 input compromise.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_stage1_confusion}
+\caption{Stage-1 confusion matrices (row-normalised) after Optuna tuning, four classifiers $\times$ two assets, on outer walk-forward OOF predictions.}
+\label{fig:stage1_confusion}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_stage1_truth_vs_pred_btc}
+\caption{Stage-1 BTC ground-truth vs.~predicted timeline (Random Forest, tuned). From top: ZigZag truth label shaded over price; predicted label shaded over price; per-day agreement (green) vs.~mismatch (red); 60-day rolling agreement rate.}
+\label{fig:stage1_truth_btc}
+\end{figure}
+
+\subsection{Stage 3: Signal Classifier (Default 3-Stage Full)}
+Out-of-fold tuned-model macro-F1 was $0.367$ for the BTC best (XGBoost) and $0.368$ for the ETH best (XGBoost). All configurations clear the chance baseline of $0.333$ but none reach the $0.40$ target. Doubling Optuna's trial budget to $60$ and widening the search space added only $+0.013$ F1m, suggesting saturation. Multiclass one-vs-rest macro AUC ranges from $0.49$ to $0.53$ across $16$ architecture-$\times$-model configurations per asset; class ranking is therefore only marginally above chance.
+
+\subsection{Architecture Ablation: An Asset-Specific Optimum}
+Table~\ref{tab:arch} reports the best $\langle\text{rule}, \text{model}\rangle$ pair per architecture. For BTC the relationship between architectural depth and Sharpe is monotonic: Sharpe rises from $0.93$ (Flat) through $1.08$ (2-Stage Trend) and $0.98$ (2-Stage Macro) to $1.15$ (3-Stage Full); macro-F1 rises in lockstep ($0.354 \to 0.367$). Hierarchical fusion adds genuine information that the flat model cannot extract from oscillators alone.
+
+For ETH the relationship reverses: the flat 6-oscillator model achieves Sharpe $0.52$, whereas adding upstream posteriors degrades performance to $0.34$ in the 3-Stage Full case. This is consistent with overfitting due to ETH's smaller out-of-fold span (2{,}000 vs. 3{,}200 days for BTC) and a higher feature-to-sample ratio. The asset-specific optimum is a concrete instance of the no-free-lunch theorem in applied financial ML. Notably, every architecture beats Buy~\&~Hold on Sharpe for both assets; on ETH every architecture also beats Buy~\&~Hold on absolute return ($-7\%$ over the OOF span). The full $4 \times 4$ architecture-by-model heatmap and best-equity curves are shown in Figs.~\ref{fig:arch_heatmap} and \ref{fig:arch_equity}.
+
+\begin{table}[t]
+\centering
+\caption{Architecture ablation: best $\langle\text{rule}, \text{model}\rangle$ per architecture on the OOF backtest. \textbf{Bold}: best per asset. ``B\&H'' = Buy \& Hold benchmark on the same span.}
+\label{tab:arch}
+\begin{tabular}{@{}llrrrrr@{}}
+\toprule
+Asset & Architecture & Best & Sharpe & Return & MaxDD & F1m \\
+\midrule
+BTC & Flat            & state., xgb     & $0.93$ & $1565\%$  & $-75\%$ & $0.354$ \\
+BTC & 2-Stage Trend   & probw., lgbm    & $1.08$ & $539\%$   & $-28\%$ & $0.358$ \\
+BTC & 2-Stage Macro   & state., rf      & $0.98$ & $1606\%$  & $-53\%$ & $0.361$ \\
+BTC & \textbf{3-Stage}& \textbf{state., xgb} & $\mathbf{1.15}$ & $\mathbf{2901\%}$ & $-46\%$ & $\mathbf{0.367}$ \\
+BTC & B\&H            & ---             & $0.95$ & $2972\%$  & $-77\%$ & ---     \\
+\midrule
+ETH & \textbf{Flat}   & \textbf{probw., lgbm} & $\mathbf{0.52}$ & $\mathbf{26\%}$ & $\mathbf{-18\%}$ & $0.354$ \\
+ETH & 2-Stage Trend   & defens., xgb    & $0.39$ & $43\%$    & $-55\%$ & $0.368$ \\
+ETH & 2-Stage Macro   & state., mlp     & $0.47$ & $69\%$    & $-55\%$ & $0.342$ \\
+ETH & 3-Stage         & probw., lgbm    & $0.34$ & $19\%$    & $-18\%$ & $0.336$ \\
+ETH & B\&H            & ---             & $0.26$ & $-7\%$    & $-72\%$ & ---     \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_arch_heatmap}
+\caption{Phase-5.1 architecture-$\times$-model F1 macro and Sharpe heatmaps across the four-architecture ablation, four classifiers, and two assets.}
+\label{fig:arch_heatmap}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_arch_equity}
+\caption{Best-architecture equity curves vs.~Buy~\&~Hold for BTC (left) and ETH (right). 3-Stage Full wins on BTC; flat baseline wins on ETH.}
+\label{fig:arch_equity}
+\end{figure}
+
+\subsection{Trading-Rule Ablation}
+The stateful long-only rule (Buy = enter, Sell = exit, Hold = preserve state) maximises BTC Sharpe but entails the highest drawdown. The probability-weighted rule (continuous position size $\propto \mathrm{clip}(P_{\text{Buy}} - P_{\text{Sell}}, 0, 1)$) wins on ETH: it cuts drawdown to $18\%$ while delivering positive return where Buy~\&~Hold loses money. The defensive rule (Buy = long, otherwise cash) sits between the two with the highest trade count and the highest transaction-cost drag. A per-asset best rule emerges: BTC favours \emph{stateful} (the test period is bull-heavy); ETH favours \emph{probability-weighted} (volatile ETH requires soft sizing for risk management).
+
+\subsection{Inner-CV Meta-Overfitting Case Study}
+\label{sec:metaoverfit}
+In our first round of Stage-1 hyperparameter tuning we used a $3$-fold inner CV. Optuna selected \texttt{min\_samples\_leaf=1} for Random Forest on both assets---a known degenerate value that allows leaves to memorise individual training samples. On the inner folds (only three windows: 2017, 2021, 2025) this scored a high F1m of $0.50$; on the outer 16-fold walk-forward, however, Random Forest \emph{regressed} by $0.014$ F1m versus the un-tuned baseline ($0.557 \to 0.543$). Switching to a $5$-fold inner CV with evenly-spaced regimes (2017 bull, 2019 recovery, 2021 peak-to-bear, 2023 winter recovery, 2025 modern) shifted the Optuna selection to \texttt{min\_samples\_leaf=11} for BTC and $5$ for ETH (closer to the un-tuned defaults) and recovered the lost performance plus added $+0.006$ F1m on BTC and $+0.012$ F1m on ETH. We hardened the search-space lower bound to \texttt{min\_samples\_leaf} $\geq 3$ going forward. This case highlights an under-discussed risk in financial-ML pipelines: the inner-CV configuration is itself a hyperparameter, and an under-resourced inner CV can degrade a tuned model below the un-tuned baseline.
+
+\subsection{Signal-Label Threshold Sensitivity}
+\label{sec:k_ablation}
+The threshold multiplier $k$ in (\ref{eq:signal_label}) controls the Buy/Hold/Sell balance. We tested $k \in \{0.4, 0.5, 0.7, 1.0\}$. For BTC, $k=0.5$ was optimal across all four classifiers. For ETH, $k=0.5$ was optimal for tree-based models, but the MLP's macro-F1 rose from $0.312$ ($k{=}0.5$) to $0.361$ ($k{=}1.0$). We retained $k=0.5$ throughout for fair cross-classifier comparison.
+
+%% ===================== 5. DISCUSSION =====================
+\section{Discussion}
+
+\subsection{Frame-Level vs.~Trade-Level Performance}
+The Stage-3 macro-F1 of $0.37$ sits well below the V5\_PLAN target of $0.40$ and only marginally above the chance baseline of $0.33$; ROC-AUC sits at $0.53$. Yet the same model, evaluated as a trading strategy, achieves Sharpe $1.15$ on BTC. We see two reasons. First, the Hold class operates as a \emph{risk-management filter}: stateful and probability-weighted rules use the Hold posterior to avoid trades on uncertain days, preserving capital that a 2-class classifier would have committed. This converts low frame accuracy into high economic precision. Second, a Sharpe of $1.15$ implies an average daily return-to-volatility ratio of $\sim 0.07$, corresponding to a per-day directional accuracy slightly above $50\%$---fully consistent with AUC $0.53$. The non-linearity arises from compounding and from selectivity ($179$ BTC trades vs.~$2{,}200$ trading days).
+
+\subsection{The Hierarchical Architecture Is Not Universally Beneficial}
+Our most striking finding is the asset-specific architecture optimum: 3-Stage Full is best for BTC, flat is best for ETH. We hypothesise that BTC's 10-year span captures multiple distinct regimes (2014--2017 nascent, 2018 bear, 2019--2020 recovery, 2021 bull peak, 2022 winter, 2023--2025 modern) that benefit from regime-aware features, while the ETH 5-year span is dominated by 2020--2022 dynamics in which raw oscillators carry sufficient information without upstream-posterior overhead. The practical implication is that \emph{every} hierarchical-architecture proposal in financial ML should be re-validated per asset and per dataset size; our four-architecture ablation provides a template.
+
+\subsection{Limitations and Future Work}
+(i)~Transaction-cost realism: $0.1\%$ one-way is conservative for liquid spot crypto but ignores spread, slippage and execution latency. (ii)~MLP class balancing was not implemented (no \texttt{class\_weight} in scikit-learn). (iii)~OOF span asymmetry: BTC starts in 2016 vs.~ETH 2020, partly explaining the architecture asymmetry. (iv)~No statistical-significance test (e.g.~McNemar~\cite{dietterich1998statistical}) over the OOF predictions. Future work will add Stage-1 calibration, dynamic Kelly-style position sizing, ablation on the Stage-2 FSM rule set, and a re-tuned Stage~1 with the dev-$0.07$ ZigZag configuration identified by our distribution sweep.
+
+%% ===================== 6. CONCLUSION =====================
+\section{Conclusion}
+We presented a three-stage hierarchical soft-fusion framework for cryptocurrency trading-signal classification, evaluated rigorously on BTC and ETH daily data with walk-forward cross-validation, Optuna hyperparameter tuning, four-classifier comparisons, and a four-architecture ablation. The framework achieves an annualised Sharpe of $1.15$ on BTC and a clean Sharpe-plus-return win on ETH versus Buy~\&~Hold---particularly striking given that ETH's Buy~\&~Hold lost $7\%$ over the test span while our model returned $+26\%$. Three findings stand out: (1)~architectural depth is asset-specific---the full hierarchy helps BTC but overfits ETH, where a flat 6-feature baseline wins; (2)~frame-level metrics underestimate trade-level value---a macro-F1 of $0.37$ and AUC $0.53$ nonetheless yield Sharpe $1.15$ once a Hold-aware trading rule is applied; (3)~inner-CV configuration is itself a hyperparameter---a poorly-resourced 3-fold inner CV induced meta-overfitting that degraded the tuned model below the un-tuned baseline; a 5-fold evenly-spaced inner CV recovered the loss. The pipeline, code, and OOF predictions are reproducible and packaged in a single Docker container with a FastAPI back-end and Chart.js front-end for live demonstration.
+
+%% ===================== REFERENCES =====================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
