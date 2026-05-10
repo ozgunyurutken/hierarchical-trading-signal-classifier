@@ -45,12 +45,31 @@ STAGE3_FEATURE_COLS = [
     "OBV_change_20d",
 ]
 
+# Regime-conditional interaction features (added Phase 7+ to address the
+# "RSI > 70 → Buy" data-driven divergence from classical TA). Provides the
+# model with explicit regime-aware oscillator readings, e.g. "MACD value
+# inside a Bull regime" vs "inside a Bear regime". Tree-based models can
+# learn these via depth-2 splits, but explicit interactions help LGBM/MLP
+# converge faster and tighten Bayesian decision-rule semantics.
+REGIME_OSC_INTERACTIONS = [
+    "RSI_14_x_PBull",         # RSI_14 * P2_Bull
+    "RSI_14_x_PBear",         # RSI_14 * P2_Bear
+    "MACD_signal_diff_x_PBull",
+    "MACD_signal_diff_x_PBear",
+    "Bollinger_pct_b_x_PBull",
+    "Bollinger_pct_b_x_PBear",
+]
+
+# Extended feature list (used by the "regime-aware" Stage 3 variant)
+STAGE3_FEATURE_COLS_EXTENDED = STAGE3_FEATURE_COLS + REGIME_OSC_INTERACTIONS
+
 FEATURE_GROUPS = {
     "Stage 1 raw":            ["P1_down", "P1_range", "P1_up"],
     "Stage 1 smoothed (10d)": ["P1_down_smooth10", "P1_range_smooth10", "P1_up_smooth10"],
     "Stage 2 regime":         ["P2_Bull", "P2_Neutral", "P2_Bear", "regime_age_days"],
     "Oscillator":             ["RSI_14", "MACD_signal_diff", "Bollinger_pct_b",
                                "Stochastic_K_14", "volume_zscore_20", "OBV_change_20d"],
+    "Regime-conditional (interaction)": REGIME_OSC_INTERACTIONS,
 }
 
 
@@ -154,4 +173,17 @@ def build_stage3_features(
     osc = build_stage3_oscillators(ohlcv)
     out = out.join(osc, how="left")
 
-    return out[STAGE3_FEATURE_COLS]
+    # --- Regime-conditional interactions ---
+    # These are computed AFTER the oscillator + Stage 2 columns are present.
+    # MACD scale: BTC daily is ~ -1500..2000. We feed the raw value
+    # (no normalization) so that tree splits stay interpretable and the
+    # interaction faithfully reflects "MACD reading in this regime".
+    out["RSI_14_x_PBull"]            = out["RSI_14"]            * out["P2_Bull"]
+    out["RSI_14_x_PBear"]            = out["RSI_14"]            * out["P2_Bear"]
+    out["MACD_signal_diff_x_PBull"]  = out["MACD_signal_diff"]  * out["P2_Bull"]
+    out["MACD_signal_diff_x_PBear"]  = out["MACD_signal_diff"]  * out["P2_Bear"]
+    out["Bollinger_pct_b_x_PBull"]   = out["Bollinger_pct_b"]   * out["P2_Bull"]
+    out["Bollinger_pct_b_x_PBear"]   = out["Bollinger_pct_b"]   * out["P2_Bear"]
+
+    # Return BOTH base + extended columns; downstream code can pick either.
+    return out[STAGE3_FEATURE_COLS_EXTENDED]

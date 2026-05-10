@@ -137,9 +137,21 @@ def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
                        cfg: WalkForwardConfig | None = None,
                        random_state: int = 42,
                        balanced: bool = False,
-                       hp: dict | None = None) -> tuple[pd.DataFrame, list[FoldResult]]:
+                       hp: dict | None = None,
+                       mlp_oversample: bool = False
+                       ) -> tuple[pd.DataFrame, list[FoldResult]]:
     """Walk-forward CV for Stage 3. OOF DataFrame columns:
-       ['P_Sell', 'P_Hold', 'P_Buy', 'pred_label', 'true_label', 'fold']."""
+       ['P_Sell', 'P_Hold', 'P_Buy', 'pred_label', 'true_label', 'fold'].
+
+    Parameters
+    ----------
+    mlp_oversample : if True and model_name == 'mlp', applies
+        imblearn.RandomOverSampler to the training fold (fitted only on
+        train data, never touching the validation fold). Used because
+        scikit-learn's MLPClassifier does not support class_weight natively
+        — this is the documented workaround. No effect on tree models
+        (they already get class_weight='balanced' or sample_weight).
+    """
     cfg = cfg or WalkForwardConfig()
     hp = hp or {}
 
@@ -169,8 +181,16 @@ def train_walk_forward(X: pd.DataFrame, y: pd.Series, model_name: str,
             scaler = StandardScaler().fit(X_tr)
             X_tr_s = scaler.transform(X_tr)
             X_val_s = scaler.transform(X_val)
-            model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced, **hp)
-            model.fit(X_tr_s, y_tr)
+            # Optional oversampling for MLP (no native class_weight support)
+            if model_name == "mlp" and mlp_oversample and balanced:
+                from imblearn.over_sampling import RandomOverSampler
+                ros = RandomOverSampler(random_state=random_state)
+                X_tr_s, y_tr_resampled = ros.fit_resample(X_tr_s, y_tr)
+                model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced, **hp)
+                model.fit(X_tr_s, y_tr_resampled)
+            else:
+                model = MODEL_FACTORIES[model_name](random_state=random_state, balanced=balanced, **hp)
+                model.fit(X_tr_s, y_tr)
             proba = model.predict_proba(X_val_s)
 
         if proba.shape[1] < 3:
