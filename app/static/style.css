@@ -1059,6 +1059,21 @@ select, input { font-family: inherit; }
   font-style: italic;
   margin-bottom: 2px;
 }
+/* Data-observation line: same size, accent color (highlights that this is
+   what the model actually learned from the BTC dataset, not a textbook
+   maxim that may invert in crypto markets). */
+.lab-slider-desc.data {
+  color: var(--accent);
+  font-style: normal;
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 6px;
+}
+.lab-slider-desc.data::before {
+  content: "▸ Observed in our data: ";
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
 .lab-slider input[type=range] {
   -webkit-appearance: none;
   width: 100%;

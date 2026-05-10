@@ -44,17 +44,23 @@ const LAB_FEATURE_GROUPS = {
   ],
   "OSCILLATORS": [
     {key: "RSI_14",            label: "RSI (14d)",       min: 0,    max: 100, step: 0.5,
-     desc: "Momentum: <30 = OVERSOLD (potential bounce), >70 = OVERBOUGHT (potential pullback)."},
+     desc:      "Classical TA: <30 OVERSOLD (bullish reversal expected), >70 OVERBOUGHT (bearish pullback).",
+     desc_data: "Our data: BOTH extremes show ~+3% mean 5d return → momentum persists in crypto, model often Buys at >70."},
     {key: "MACD_signal_diff",  label: "MACD − signal",   min: -800, max: 800, step: 1,
-     desc: "Trend-momentum: positive = bullish (MACD above signal), negative = bearish."},
+     desc:      "Classical TA: positive = bullish momentum (MACD above signal), negative = bearish.",
+     desc_data: "Our data: U-shaped relation. Modest-negative (-200..-50) is the only truly bearish bin (-0.5% fwd). Extremes (both directions) tend to bounce."},
     {key: "Bollinger_pct_b",   label: "Bollinger %B",    min: -0.5, max: 1.5, step: 0.01,
-     desc: "Position within 20d±2σ band: <0 = below lower band (oversold), >1 = above upper band (overbought)."},
+     desc:      "Classical TA: <0 below lower band (oversold), >1 above upper band (overbought).",
+     desc_data: "Same ambiguity as RSI: extremes can mean either reversal or trend-continuation depending on regime."},
     {key: "Stochastic_K_14",   label: "Stochastic %K",   min: 0,    max: 100, step: 0.5,
-     desc: "Like RSI: <20 = oversold, >80 = overbought. Faster than RSI."},
+     desc:      "Classical TA: <20 oversold, >80 overbought. Faster-reacting than RSI.",
+     desc_data: "Highly correlated with RSI in our 16-feature set; model treats them as a smoothed pair."},
     {key: "volume_zscore_20",  label: "Volume z-score",  min: -3,   max: 5,   step: 0.05,
-     desc: "Volume relative to 20d mean (z-score). >1 = above-average volume (institutional activity)."},
+     desc:      "Volume relative to 20d mean (z-score). >1 = above-average volume.",
+     desc_data: "Direction-agnostic: large volume on a Bear regime day is bearish, on a Bull day is bullish — model uses it as a confidence amplifier."},
     {key: "OBV_change_20d",    label: "OBV change 20d",  min: -0.5, max: 0.5, step: 0.005,
-     desc: "20-day OBV change: positive = ACCUMULATION (buying), negative = DISTRIBUTION (selling)."},
+     desc:      "Classical TA: positive = ACCUMULATION (buying), negative = DISTRIBUTION (selling).",
+     desc_data: "OBV is winsorized in our pipeline; tree models use it as a low-frequency direction filter."},
   ],
 };
 
@@ -1228,11 +1234,13 @@ function buildLabSliders() {
     for (const f of feats) {
       const row = document.createElement("div");
       row.className = "lab-slider";
-      const desc = f.desc ? `<div class="lab-slider-desc">${f.desc}</div>` : "";
+      const desc      = f.desc      ? `<div class="lab-slider-desc">${f.desc}</div>` : "";
+      const descData  = f.desc_data ? `<div class="lab-slider-desc data">${f.desc_data}</div>` : "";
       row.innerHTML = `
         <div class="lab-slider-main">
           <div class="lab-slider-label">${f.label}</div>
           ${desc}
+          ${descData}
           <input type="range" min="${f.min}" max="${f.max}" step="${f.step}" data-key="${f.key}" />
         </div>
         <div class="lab-slider-value" data-key-val="${f.key}">—</div>
