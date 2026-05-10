@@ -55,7 +55,6 @@ const ST = {
   playerHandle: null,
   hero: {chart: null, candle: null, volume: null, regime: null, marker: null},
   miniCanvas: null,
-  raceChart: null,
   raceStart: -1,         // index from which the portfolio race is computed (set on Play)
   labOpen: false,
   labMode: "actual",   // "actual" | "custom"
@@ -402,97 +401,61 @@ function refreshAll() {
   updateRaceChart(b, i);
 }
 
-// ───────────────────────── Portfolio race ─────────────────────────
+// ───────────────────────── Portfolio race (vanilla canvas) ─────────────────────────
+//
+// Replaced Chart.js with a hand-rolled canvas to eliminate ResizeObserver +
+// per-tick parsing overhead. Renders only when the race is active.
+
+const RACE = {
+  ctx:    null,
+  pixelW: 0,
+  pixelH: 0,
+  cssW:   0,
+  cssH:   0,
+  pad:    { top: 8, right: 12, bottom: 18, left: 38 },
+  rafPending: false,
+  pending: null,  // {b, i, stratPct, bhPct, days, lab}
+};
+
 function buildRaceChart() {
-  const ctx = $("raceChart").getContext("2d");
-  ST.raceChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: [],
-      datasets: [
-        {
-          label: "Strategy",
-          data: [],
-          borderColor: COLORS.buy,
-          backgroundColor: "rgba(0, 255, 159, 0.10)",
-          borderWidth: 2,
-          fill: true,
-          pointRadius: 0,
-          tension: 0,
-        },
-        {
-          label: "Buy & Hold",
-          data: [],
-          borderColor: COLORS.txt1 || "#b3bfd6",
-          borderWidth: 1.5,
-          borderDash: [5, 5],
-          pointRadius: 0,
-          tension: 0,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      // Skip Chart.js's expensive parsing — we feed parallel arrays.
-      normalized: true,
-      // Reduce hit-test work during play / scroll
-      interaction: { mode: "index", intersect: false },
-      // Resize debouncing: the canvas's ResizeObserver fires on every page
-      // scroll because LightweightCharts above can change layout. 250ms
-      // debounce eliminates jank without harming perceived responsiveness.
-      resizeDelay: 250,
-      scales: {
-        x: {
-          ticks:   { color: "#6b7895", maxTicksLimit: 6, autoSkip: true, font: { family: "JetBrains Mono", size: 10 } },
-          grid:    { color: "rgba(120,144,184,0.10)" },
-          border:  { color: "rgba(120,144,184,0.25)" },
-        },
-        y: {
-          ticks: {
-            color: "#6b7895",
-            font: { family: "JetBrains Mono", size: 10 },
-            maxTicksLimit: 5,
-            callback: (v) => (v >= 0 ? "+" : "") + v.toFixed(0) + "%",
-          },
-          grid:   { color: "rgba(120,144,184,0.10)" },
-          border: { color: "rgba(120,144,184,0.25)" },
-        },
-      },
-      plugins: {
-        // min-max decimation: when the dataset has more samples than fit in
-        // pixels (typical: 1000+ pts on a 800-px canvas), Chart.js downsamples
-        // to extrema only — visually identical, ~10× faster.
-        decimation: {
-          enabled: true,
-          algorithm: "min-max",
-        },
-        // Header pills already show Strategy/B&H labels with live deltas.
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: "rgba(6, 9, 15, 0.95)",
-          borderColor: "rgba(120, 144, 184, 0.30)",
-          borderWidth: 1,
-          titleColor: "#e6ecfa",
-          bodyColor: "#b3bfd6",
-          titleFont: { family: "JetBrains Mono", size: 11 },
-          bodyFont:  { family: "JetBrains Mono", size: 11 },
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${(ctx.parsed.y >= 0 ? "+" : "")}${ctx.parsed.y.toFixed(2)}%`,
-          },
-        },
-      },
-    },
-  });
+  const cv = $("raceChart");
+  RACE.ctx = cv.getContext("2d");
+
+  // Throttled resize via window resize event only (NOT ResizeObserver).
+  // Page scroll never fires window resize, so we get zero scroll jank.
+  let resizeTimer = null;
+  const onResize = () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      sizeRaceCanvas();
+      // Re-render with last known state if any.
+      if (RACE.pending) drawRaceFromPending();
+    }, 150);
+  };
+  window.addEventListener("resize", onResize, { passive: true });
+
+  sizeRaceCanvas();
+  resetRaceChart();
+}
+
+function sizeRaceCanvas() {
+  const cv  = $("raceChart");
+  const dpr = window.devicePixelRatio || 1;
+  RACE.cssW   = cv.clientWidth;
+  RACE.cssH   = cv.clientHeight;
+  RACE.pixelW = Math.round(RACE.cssW * dpr);
+  RACE.pixelH = Math.round(RACE.cssH * dpr);
+  cv.width  = RACE.pixelW;
+  cv.height = RACE.pixelH;
+  RACE.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);  // scale once, draw in CSS px
 }
 
 function resetRaceChart() {
-  if (!ST.raceChart) return;
-  ST.raceChart.data.labels = [];
-  ST.raceChart.data.datasets[0].data = [];
-  ST.raceChart.data.datasets[1].data = [];
-  ST.raceChart.update("none");
+  RACE.pending = null;
+  if (RACE.ctx) {
+    RACE.ctx.clearRect(0, 0, RACE.cssW, RACE.cssH);
+    drawRaceEmpty("press ▶ to start a race");
+  }
   $("raceStartLabel").textContent = "— press ▶ to start a race —";
   $("raceStrategyPill").textContent = "Strategy 0.00%";
   $("raceBHPill").textContent       = "B&H 0.00%";
@@ -508,12 +471,11 @@ function setRaceEdgePill(edge) {
 }
 
 function updateRaceChart(b, i) {
-  if (!ST.raceChart || !b) return;
+  if (!RACE.ctx || !b) return;
   const start = ST.raceStart;
 
-  // No race yet, or scrubber moved before race start: keep race chart blank.
   if (start < 0 || i < start) {
-    if (ST.raceChart.data.labels.length > 0) resetRaceChart();
+    if (RACE.pending) resetRaceChart();
     return;
   }
 
@@ -521,24 +483,179 @@ function updateRaceChart(b, i) {
   const bhBase    = b.bh_equity[start];
   if (!stratBase || !bhBase) return;
 
-  const lab      = b.dates.slice(start, i + 1);
-  const stratPct = b.equity.slice(start, i + 1).map(v => (v / stratBase - 1) * 100);
-  const bhPct    = b.bh_equity.slice(start, i + 1).map(v => (v / bhBase - 1) * 100);
+  // Read slices once; do NOT allocate intermediate arrays per tick — compute
+  // min/max + last value in a single pass.
+  const len = i - start + 1;
+  let minY = Infinity, maxY = -Infinity;
+  let lastS = 0, lastB = 0;
+  // Cache last computed series (for redraw on resize). We only store the
+  // *normalized* arrays here, which are short-lived and reused.
+  const stratArr = new Float32Array(len);
+  const bhArr    = new Float32Array(len);
+  for (let k = 0; k < len; k++) {
+    const idx = start + k;
+    const sP = (b.equity[idx]    / stratBase - 1) * 100;
+    const bP = (b.bh_equity[idx] / bhBase    - 1) * 100;
+    stratArr[k] = sP;
+    bhArr[k]    = bP;
+    if (sP < minY) minY = sP;
+    if (sP > maxY) maxY = sP;
+    if (bP < minY) minY = bP;
+    if (bP > maxY) maxY = bP;
+    lastS = sP; lastB = bP;
+  }
+  // Pad y-range a tiny bit so lines don't kiss the borders
+  if (minY === maxY) { minY -= 1; maxY += 1; }
+  const yPad = (maxY - minY) * 0.08;
+  minY -= yPad; maxY += yPad;
 
-  ST.raceChart.data.labels             = lab;
-  ST.raceChart.data.datasets[0].data   = stratPct;
-  ST.raceChart.data.datasets[1].data   = bhPct;
-  ST.raceChart.update("none");
+  RACE.pending = {
+    stratArr, bhArr, len,
+    minY, maxY,
+    startDate: b.dates[start],
+    days: i - start,
+  };
+  scheduleRaceDraw();
 
-  const lastS = stratPct[stratPct.length - 1] ?? 0;
-  const lastB = bhPct[bhPct.length - 1]       ?? 0;
-  const edge  = lastS - lastB;
-  const days  = i - start;
+  // Pills
+  const edge = lastS - lastB;
   $("raceStartLabel").textContent =
-    `Race since ${b.dates[start]} · ${days} day${days === 1 ? "" : "s"}`;
+    `Race since ${b.dates[start]} · ${i - start} day${(i - start) === 1 ? "" : "s"}`;
   $("raceStrategyPill").textContent = `Strategy ${lastS >= 0 ? "+" : ""}${lastS.toFixed(2)}%`;
   $("raceBHPill").textContent       = `B&H ${lastB >= 0 ? "+" : ""}${lastB.toFixed(2)}%`;
   setRaceEdgePill(edge);
+}
+
+function scheduleRaceDraw() {
+  if (RACE.rafPending) return;
+  RACE.rafPending = true;
+  requestAnimationFrame(() => {
+    RACE.rafPending = false;
+    drawRaceFromPending();
+  });
+}
+
+function drawRaceFromPending() {
+  if (!RACE.pending) return;
+  const { stratArr, bhArr, len, minY, maxY, days } = RACE.pending;
+  drawRaceFrame(stratArr, bhArr, len, minY, maxY, days);
+}
+
+function drawRaceFrame(stratArr, bhArr, len, minY, maxY, days) {
+  const ctx = RACE.ctx;
+  const W   = RACE.cssW;
+  const H   = RACE.cssH;
+  const P   = RACE.pad;
+  const plotW = W - P.left - P.right;
+  const plotH = H - P.top  - P.bottom;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Y mapping
+  const span = (maxY - minY) || 1;
+  const yPx  = (v) => P.top + plotH * (1 - (v - minY) / span);
+  const xPx  = (k) => P.left + (len > 1 ? plotW * (k / (len - 1)) : plotW / 2);
+
+  // Grid + zero line
+  ctx.strokeStyle = "rgba(120,144,184,0.10)";
+  ctx.lineWidth   = 1;
+  ctx.font        = "10px 'JetBrains Mono', monospace";
+  ctx.fillStyle   = "#6b7895";
+  ctx.textBaseline = "middle";
+  ctx.textAlign   = "right";
+
+  // 3 horizontal grid lines (min, mid, max)
+  const ySteps = 3;
+  for (let s = 0; s <= ySteps; s++) {
+    const v = minY + (maxY - minY) * (s / ySteps);
+    const y = yPx(v);
+    ctx.beginPath();
+    ctx.moveTo(P.left, y);
+    ctx.lineTo(W - P.right, y);
+    ctx.stroke();
+    ctx.fillText((v >= 0 ? "+" : "") + v.toFixed(0) + "%", P.left - 6, y);
+  }
+  // Highlight zero line if visible
+  if (minY < 0 && maxY > 0) {
+    const y0 = yPx(0);
+    ctx.strokeStyle = "rgba(179,191,214,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(P.left, y0);
+    ctx.lineTo(W - P.right, y0);
+    ctx.stroke();
+  }
+
+  // X tick: just "Day 0" and "Day N"
+  ctx.textAlign    = "left";
+  ctx.fillStyle    = "#6b7895";
+  ctx.fillText("Day 0", P.left, H - 4);
+  ctx.textAlign    = "right";
+  ctx.fillText(`Day ${days}`, W - P.right, H - 4);
+
+  // B&H line (gray dashed) — drawn first so Strategy is on top
+  ctx.strokeStyle = "rgba(179,191,214,0.85)";
+  ctx.lineWidth   = 1.4;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  // Stride if many points so we don't draw 2400 segments per frame
+  const stride = Math.max(1, Math.floor(len / 600));
+  let started = false;
+  for (let k = 0; k < len; k += stride) {
+    const x = xPx(k);
+    const y = yPx(bhArr[k]);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  // ensure last point drawn
+  if ((len - 1) % stride !== 0) {
+    ctx.lineTo(xPx(len - 1), yPx(bhArr[len - 1]));
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Strategy line + soft fill
+  // Fill region first (Strategy down to baseline)
+  ctx.beginPath();
+  started = false;
+  for (let k = 0; k < len; k += stride) {
+    const x = xPx(k);
+    const y = yPx(stratArr[k]);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  if ((len - 1) % stride !== 0) {
+    ctx.lineTo(xPx(len - 1), yPx(stratArr[len - 1]));
+  }
+  ctx.lineTo(xPx(len - 1), P.top + plotH);
+  ctx.lineTo(xPx(0),       P.top + plotH);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(0, 255, 159, 0.10)";
+  ctx.fill();
+
+  ctx.strokeStyle = COLORS.buy;
+  ctx.lineWidth   = 2;
+  ctx.beginPath();
+  started = false;
+  for (let k = 0; k < len; k += stride) {
+    const x = xPx(k);
+    const y = yPx(stratArr[k]);
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  if ((len - 1) % stride !== 0) {
+    ctx.lineTo(xPx(len - 1), yPx(stratArr[len - 1]));
+  }
+  ctx.stroke();
+}
+
+function drawRaceEmpty(msg) {
+  const ctx = RACE.ctx;
+  ctx.clearRect(0, 0, RACE.cssW, RACE.cssH);
+  ctx.fillStyle = "#4a5570";
+  ctx.font = "11px 'JetBrains Mono', monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(msg, RACE.cssW / 2, RACE.cssH / 2);
 }
 
 function updateSignal(b, i) {
