@@ -306,10 +306,12 @@ function highlightHeroDate(bundle, idx) {
       }
       if (t.exit_idx != null && t.exit_idx >= ST.raceStart &&
           t.exit_idx <= idx && t.exit_date) {
+        // Exit always shown in red regardless of trade P&L — color encodes
+        // direction (entry = green up, exit = red down), not outcome.
         markers.push({
           time: bundle.dates[t.exit_idx],
           position: "aboveBar",
-          color: t.won ? COLORS.buy : COLORS.sell,
+          color: COLORS.sell,
           shape: "arrowDown",
           text: "",
         });
@@ -346,44 +348,8 @@ function renderScrubber(bundle) {
   $("scrubFirst").textContent = bundle.dates[0];
   $("scrubMid").textContent   = bundle.dates[Math.floor(bundle.n / 2)];
   $("scrubLast").textContent  = bundle.dates[bundle.n - 1];
-
-  // Mini equity ghost behind the scrubber track
-  const cv = $("miniEquity");
-  cv.width = cv.clientWidth * window.devicePixelRatio;
-  cv.height = cv.clientHeight * window.devicePixelRatio;
-  const ctx = cv.getContext("2d");
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-  const W = cv.clientWidth, H = cv.clientHeight;
-  ctx.clearRect(0, 0, W, H);
-
-  const eq = bundle.equity;
-  const bh = bundle.bh_equity;
-  const minV = Math.min(...eq, ...bh);
-  const maxV = Math.max(...eq, ...bh);
-  const sx = (i) => (i / (bundle.n - 1)) * W;
-  const sy = (v) => H - ((v - minV) / (maxV - minV)) * H * 0.95 - 1;
-
-  // B&H (dim)
-  ctx.beginPath();
-  ctx.strokeStyle = "rgba(120,144,184,0.45)";
-  ctx.lineWidth = 1;
-  for (let i = 0; i < bundle.n; i++) {
-    const x = sx(i), y = sy(bh[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-
-  // strategy
-  ctx.beginPath();
-  ctx.strokeStyle = "rgba(0,255,159,0.85)";
-  ctx.lineWidth = 1.2;
-  for (let i = 0; i < bundle.n; i++) {
-    const x = sx(i), y = sy(eq[i]);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-
-  ST.miniCanvas = cv;
+  // Mini-equity ghost canvas removed (the dedicated PORTFOLIO RACE panel
+  // serves the same purpose and is more legible).
 }
 
 function seek(idx) {

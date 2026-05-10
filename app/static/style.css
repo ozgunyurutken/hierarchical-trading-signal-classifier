@@ -242,10 +242,35 @@ select, input { font-family: inherit; }
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: 10px 12px;     /* tighter than default 16px */
+  overflow: hidden;
 }
-.right-stack > .panel .panel-header { flex: 0 0 auto; }
+.right-stack > .panel .panel-header { flex: 0 0 auto; margin-bottom: 6px; }
+.right-stack > .panel .panel-header h2 { font-size: 10px; }
 .right-stack > .panel .gauge-body,
 .right-stack > .panel .votes-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+/* Compact gauge / regime / votes inside the right column */
+.right-stack .gauge-body { gap: 8px; }
+.right-stack .gauge { max-height: 56px; }
+.right-stack .gauge-meta { gap: 2px; }
+.right-stack .gauge-class { font-size: 11px; padding: 2px 0; margin-bottom: 2px; }
+.right-stack .gauge-row { font-size: 10px; }
+.right-stack .gauge-row.sub { font-size: 9px; padding-top: 2px; margin-top: 2px; }
+
+.right-stack .regime-orb { width: 56px; height: 56px; }
+.right-stack .orb-ring { border-width: 2px; box-shadow: inset 0 0 14px currentColor, 0 0 18px currentColor; }
+.right-stack .orb-label { font-size: 9px; letter-spacing: 0.06em; }
+
+.right-stack .votes-body { gap: 4px; }
+.right-stack .vote-row {
+  grid-template-columns: 38px 1fr 44px;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 10px;
+}
+.right-stack .vote-bar { height: 10px; }
+.right-stack .vote-name { letter-spacing: 0.02em; }
 
 .hero-chart {
   width: 100%;
@@ -272,7 +297,7 @@ select, input { font-family: inherit; }
 
 /* ─────────────── PORTFOLIO RACE ─────────────── */
 
-.race { grid-column: span 12; padding: 12px 16px 14px; }
+.race { grid-column: span 6; padding: 12px 16px 14px; }
 .race-chart {
   width: 100%;
   height: 110px;
@@ -326,6 +351,13 @@ select, input { font-family: inherit; }
 /* ─────────────── SCRUBBER ─────────────── */
 
 .scrubber { grid-column: span 12; padding: 12px 20px; }
+.scrubber.thin { padding: 6px 16px; }
+.scrubber.thin .play-btn,
+.scrubber.thin .reset-btn { width: 28px; height: 28px; font-size: 12px; }
+.scrubber.thin .speed-btn { padding: 3px 8px; font-size: 10px; }
+.scrubber.thin .scrubber-track-wrap { height: 28px; }
+.scrubber.thin .scrubber-input { top: 8px; }
+.scrubber.thin .scrubber-labels { font-size: 8px; }
 .scrubber-row { display: flex; align-items: center; gap: 20px; }
 
 .play-controls { display: flex; align-items: center; gap: 8px; }
@@ -419,7 +451,7 @@ select, input { font-family: inherit; }
 
 /* ─────────────── DECISION ROW ─────────────── */
 
-.signal-card { grid-column: span 3; }
+.signal-card { grid-column: span 6; }
 /* gauge-card / votes-card are inside .right-stack now (flex children),
    span declarations remain here as fallback for narrow viewports where
    the hero-row collapses to a single column. */
@@ -569,7 +601,7 @@ select, input { font-family: inherit; }
 .vote-pred.hold { color: var(--hold); }
 .vote-pred.sell { color: var(--sell); }
 
-.reasons-card { grid-column: span 3; }
+.reasons-card { grid-column: span 6; }
 .reasons { list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .reasons li {
   display: grid;

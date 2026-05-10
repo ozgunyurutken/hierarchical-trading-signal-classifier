@@ -132,7 +132,32 @@
       </div>
     </div>
 
-    <!-- PORTFOLIO RACE -->
+    <!-- THIN SCRUBBER — directly under the hero/right-stack row -->
+    <section class="panel scrubber thin">
+      <div class="scrubber-row">
+        <div class="play-controls">
+          <button class="play-btn" id="playBtn" title="Play / pause">▶</button>
+          <div class="speed-group">
+            <button class="speed-btn active" data-speed="1">1×</button>
+            <button class="speed-btn" data-speed="3">3×</button>
+            <button class="speed-btn" data-speed="6">6×</button>
+          </div>
+          <button class="reset-btn" id="resetBtn" title="Reset race + jump to latest">⟲</button>
+        </div>
+
+        <div class="scrubber-track-wrap">
+          <input type="range" id="scrubber" class="scrubber-input"
+                 min="0" max="100" value="100" step="1" />
+          <div class="scrubber-labels">
+            <span id="scrubFirst">—</span>
+            <span id="scrubMid">—</span>
+            <span id="scrubLast">—</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROW: PORTFOLIO RACE (6) + WHAT HAPPENED (6) -->
     <section class="panel race">
       <div class="panel-header">
         <h2>PORTFOLIO RACE — STAGE 3 vs BUY &amp; HOLD</h2>
@@ -146,33 +171,24 @@
       <canvas id="raceChart" class="race-chart"></canvas>
     </section>
 
-    <!-- TIMELINE SCRUBBER -->
-    <section class="panel scrubber">
-      <div class="scrubber-row">
-        <div class="play-controls">
-          <button class="play-btn" id="playBtn" title="Play / pause">▶</button>
-          <div class="speed-group">
-            <button class="speed-btn active" data-speed="1">1×</button>
-            <button class="speed-btn" data-speed="3">3×</button>
-            <button class="speed-btn" data-speed="6">6×</button>
-          </div>
-          <button class="reset-btn" id="resetBtn" title="Reset race + jump to latest">⟲</button>
-        </div>
-
-        <div class="scrubber-track-wrap">
-          <canvas id="miniEquity" class="mini-equity"></canvas>
-          <input type="range" id="scrubber" class="scrubber-input"
-                 min="0" max="100" value="100" step="1" />
-          <div class="scrubber-labels">
-            <span id="scrubFirst">—</span>
-            <span id="scrubMid">—</span>
-            <span id="scrubLast">—</span>
-          </div>
-        </div>
+    <section class="panel outcome-card">
+      <div class="panel-header"><h2>WHAT HAPPENED</h2></div>
+      <!-- 1) Strategy decision FIRST — most prominent (rule-aware) -->
+      <div class="strategy-decision" id="strategyDecision">
+        <label>STRATEGY DECISION (rule-aware)</label>
+        <b id="stratDecText">—</b>
+      </div>
+      <!-- 2) Trade simulation (mid) -->
+      <div class="trade-sim" id="tradeSim">—</div>
+      <!-- 3) Forward-price outcomes LAST — small footer -->
+      <div class="outcome-grid compact">
+        <div class="outcome-cell" id="oc5"><label>5d price</label><b>—</b></div>
+        <div class="outcome-cell" id="oc10"><label>10d price</label><b>—</b></div>
+        <div class="outcome-cell" id="oc30"><label>30d price</label><b>—</b></div>
       </div>
     </section>
 
-    <!-- DECISION ROW: signal (3) | what happened (6) | reasons (3) -->
+    <!-- ROW: SIGNAL (6) + WHY THIS SIGNAL (6) -->
     <section class="panel signal-card">
       <div class="panel-header"><h2>SIGNAL</h2></div>
       <div class="signal-body">
@@ -195,23 +211,6 @@
             <span class="prob-val" id="pSell">—</span>
           </div>
         </div>
-      </div>
-    </section>
-
-    <section class="panel outcome-card">
-      <div class="panel-header"><h2>WHAT HAPPENED</h2></div>
-      <!-- 1) Strategy decision FIRST — most prominent (rule-aware) -->
-      <div class="strategy-decision" id="strategyDecision">
-        <label>STRATEGY DECISION (rule-aware)</label>
-        <b id="stratDecText">—</b>
-      </div>
-      <!-- 2) Trade simulation (mid) -->
-      <div class="trade-sim" id="tradeSim">—</div>
-      <!-- 3) Forward-price outcomes LAST — small footer -->
-      <div class="outcome-grid compact">
-        <div class="outcome-cell" id="oc5"><label>5d price</label><b>—</b></div>
-        <div class="outcome-cell" id="oc10"><label>10d price</label><b>—</b></div>
-        <div class="outcome-cell" id="oc30"><label>30d price</label><b>—</b></div>
       </div>
     </section>
 
