@@ -1356,17 +1356,118 @@ y_t = Hold  diğer durumda</code></pre>
     renderGlossary(document.getElementById("glossary-search").value);
   }
 
-  // === Tooltip click-to-show on mobile ===
-  document.querySelectorAll('.term').forEach(el => {
-    el.setAttribute('tabindex', '0');
-    el.addEventListener('click', e => {
-      e.preventDefault();
-      document.querySelectorAll('.term.tapped').forEach(t => { if (t !== el) t.classList.remove('tapped'); });
-      el.classList.toggle('tapped');
+  // === Auto-tooltipify: GLOSSARY'deki kısaltmaları sayfada bul, .term span'ıyla sar ===
+  // (ilk kullanım `.first-use` ile inline açıklı, sonraki kullanımlarda hover tooltip için)
+  function autoTooltipify() {
+    // Anahtar genişletme: "BTC / ETH" gibi multi-key entry'leri ayır
+    const flat = [];
+    GLOSSARY.forEach(([k, v]) => {
+      k.split(/\s*\/\s*/).forEach(part => flat.push([part.trim(), v]));
     });
-  });
+    // Ek alias'lar (sözlükte uzun form, metinde kısa form geçenler)
+    const aliases = [
+      ['Bitcoin', 'Bitcoin — projedeki birinci kripto varlık (BTC)'],
+      ['Ethereum', 'Ethereum — projedeki ikinci kripto varlık (ETH)'],
+      ['Random Forest', 'Çok sayıda karar ağacının bagging ile birleştirilmesi (RF)'],
+      ['XGBoost', 'Gradient-boosted decision trees, regülerizasyonlu (XGB)'],
+      ['LightGBM', "Microsoft'un leaf-wise boosted trees, hızlı (LGBM)"],
+      ['Posterior', 'Veriye bakıldıktan sonra hesaplanan sınıf olasılığı'],
+      ['Lookahead bias', 'Modelin tahmin sırasında geleceği görmesi durumu — yasak'],
+      ['lookahead bias', 'Modelin tahmin sırasında geleceği görmesi durumu — yasak'],
+      ['Soft fusion', 'Hard label yerine olasılık vektörü taşımak'],
+      ['soft fusion', 'Hard label yerine olasılık vektörü taşımak'],
+      ['Walk-forward CV', "Zaman-sıralı doğrulama; train hep test'ten önce"],
+      ['walk-forward CV', "Zaman-sıralı doğrulama; train hep test'ten önce"],
+      ['Walk-forward', "Zaman-sıralı doğrulama"],
+      ['walk-forward', "Zaman-sıralı doğrulama"],
+      ['Optuna', 'Bayesian hyperparameter optimization kütüphanesi'],
+      ['FastAPI', 'Modern Python web framework, async + type-hint'],
+      ['z-score', "(değer − ortalama) / standart sapma"],
+      ['posterior', 'Veriye bakıldıktan sonra hesaplanan sınıf olasılığı'],
+    ];
+    aliases.forEach(a => flat.push(a));
+
+    // Uzundan kısaya sırala (önce "FedFunds" sonra "M2" — nested match'leri engellemek için)
+    flat.sort((a, b) => b[0].length - a[0].length);
+    // Map yap (case-insensitive lookup için lower-case key)
+    const lookup = new Map();
+    flat.forEach(([k, v]) => { if (!lookup.has(k)) lookup.set(k, v); });
+
+    // Regex inşa (özel karakterleri escape, kelime sınırı için custom lookahead/behind)
+    const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(
+      '(?<![A-Za-zÇĞİÖŞÜçğıöşü0-9_])(' +
+      flat.map(([k]) => escapeRe(k)).join('|') +
+      ')(?![A-Za-zÇĞİÖŞÜçğıöşü0-9_])',
+      'g'
+    );
+
+    const SKIP_TAGS = new Set(['SCRIPT','STYLE','CODE','PRE','TEXTAREA','INPUT','OPTION','BUTTON','H1','H2','H3','H4']);
+    const SKIP_CLASSES = new Set(['first-use','expansion','term','close-x']);
+
+    function shouldSkip(node) {
+      if (!node || node.nodeType !== 1) return false;
+      if (SKIP_TAGS.has(node.tagName)) return true;
+      if (node.namespaceURI === 'http://www.w3.org/2000/svg') return true;
+      if (node.id === 'glossary-panel' || node.id === 'glossary-btn') return true;
+      if (node.classList) {
+        for (const c of SKIP_CLASSES) if (node.classList.contains(c)) return true;
+      }
+      // Atadan birinde first-use/term/svg varsa skip
+      let p = node.parentElement;
+      while (p) {
+        if (SKIP_CLASSES.has('first-use') && p.classList && (p.classList.contains('first-use') || p.classList.contains('term'))) return true;
+        if (p.namespaceURI === 'http://www.w3.org/2000/svg') return true;
+        if (p.tagName && SKIP_TAGS.has(p.tagName)) return true;
+        p = p.parentElement;
+      }
+      return false;
+    }
+
+    function walk(node) {
+      if (node.nodeType === 3) {
+        const txt = node.textContent;
+        pattern.lastIndex = 0;
+        if (!pattern.test(txt)) return;
+        pattern.lastIndex = 0;
+        const frag = document.createDocumentFragment();
+        let last = 0, m;
+        while ((m = pattern.exec(txt)) !== null) {
+          if (m.index > last) frag.appendChild(document.createTextNode(txt.slice(last, m.index)));
+          const span = document.createElement('span');
+          span.className = 'term';
+          span.setAttribute('data-tip', lookup.get(m[0]) || '');
+          span.setAttribute('tabindex', '0');
+          span.textContent = m[0];
+          frag.appendChild(span);
+          last = m.index + m[0].length;
+        }
+        if (last < txt.length) frag.appendChild(document.createTextNode(txt.slice(last)));
+        if (frag.childNodes.length) node.parentNode.replaceChild(frag, node);
+      } else if (node.nodeType === 1) {
+        if (shouldSkip(node)) return;
+        const kids = Array.from(node.childNodes);
+        kids.forEach(walk);
+      }
+    }
+
+    const main = document.querySelector('main');
+    if (main) walk(main);
+  }
+
+  // Önce auto-wrap, sonra click handler (event delegation ile yeni eklenenler de çalışsın)
+  autoTooltipify();
+
+  // === Tooltip click-to-show on mobile (event delegation) ===
   document.addEventListener('click', e => {
-    if (!e.target.classList.contains('term') && !e.target.closest('#glossary-panel') && e.target.id !== 'glossary-btn') {
+    const term = e.target.closest && e.target.closest('.term');
+    if (term) {
+      e.preventDefault();
+      document.querySelectorAll('.term.tapped').forEach(t => { if (t !== term) t.classList.remove('tapped'); });
+      term.classList.toggle('tapped');
+      return;
+    }
+    if (!e.target.closest('#glossary-panel') && e.target.id !== 'glossary-btn') {
       document.querySelectorAll('.term.tapped').forEach(t => t.classList.remove('tapped'));
     }
   });
