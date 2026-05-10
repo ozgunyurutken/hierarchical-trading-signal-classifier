@@ -1,23 +1,20 @@
-"""
-FastAPI backend for the Crypto Signal Classifier (MVP build).
+"""V5 FastAPI demo for the Three-Stage Hierarchical Crypto Signal Classifier.
 
 Endpoints
 ---------
-GET  /                          serves the static frontend
-GET  /health                    liveness + model loading status
-GET  /test_dates/{symbol}       list of dates available in the test period (used by the dropdown)
-POST /predict                   prediction by date (uses pre-computed features) or live (yfinance)
-GET  /indicators/{symbol}       latest computed indicators for a symbol (live yfinance fetch)
+GET  /                                serves the static frontend
+GET  /health                          liveness + cache status
+GET  /assets                          ["BTC", "ETH"]
+GET  /test_dates/{asset}              chronological OOF dates for the asset
+GET  /predict                         query params: asset, date, arch, rule
+GET  /equity/{asset}                  equity curve data for best model (BTC: 3stage_full+xgb+stateful, ETH: flat+lgbm+prob_weighted)
 
-Design notes
-------------
-- Stage 2 is a clustering artifact (`HierarchicalSoftPipeline`), not a supervised classifier.
-- The default Stage 1 / Stage 3 path is **LDA** (classical PR baseline). MLP is loaded too and
-  could be exposed via a `?model=mlp` query param later.
-- Date-based predictions read from `data/processed/btc_features_*` so a live demo never depends
-  on internet. The Live button hits yfinance and is best-effort.
+Design
+------
+Reads pre-computed OOF predictions from data/processed/{asset}_stage3_oof_{model}_v5_tuned_{arch}.csv.
+No on-the-fly inference — predictions are walk-forward OOF, deterministic reproducible.
+This makes the demo Docker-stable: no model loading or sklearn version drift.
 """
-
 from __future__ import annotations
 
 import sys
@@ -26,285 +23,235 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from typing import Literal
-
-import joblib
-import numpy as np
 import pandas as pd
-import yfinance as yf
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from src.features.macro_features import compute_derived_spreads, compute_macro_features
-from src.features.technical_indicators import (
-    compute_oscillator_indicators,
-    compute_trend_indicators,
-    compute_volatility_indicators,
-    compute_volume_indicators,
-)
-from src.models.pipeline import HierarchicalSoftPipeline
 
+app = FastAPI(title="V5 Hierarchical Trading Signal Classifier", version="5.0")
+app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "app" / "static"), name="static")
 
-app = FastAPI(title="Crypto Signal Classifier", version="1.0.0-mvp")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+ASSETS = ["BTC", "ETH"]
+ARCHS = ["flat", "2stage_trend", "2stage_macro", "3stage_full"]
+RULES = ["stateful", "defensive", "prob_weighted"]
+MODELS = ["xgboost", "lightgbm", "random_forest", "mlp"]
 
+# Best per asset (Phase 5.1 ablation winners)
+BEST_PER_ASSET = {
+    "BTC": {"arch": "3stage_full", "model": "xgboost",  "rule": "stateful"},
+    "ETH": {"arch": "flat",         "model": "lightgbm", "rule": "prob_weighted"},
+}
 
-# Global state populated on startup
-state: dict = {
-    "pipelines": {},          # {"lda": HierarchicalSoftPipeline, "mlp": HierarchicalSoftPipeline}
-    "stage2_artifact": None,  # GMM cluster artifact dict
-    "stage1_features": None,  # pre-computed BTC trend features
-    "stage3_features": None,  # pre-computed BTC oscillator features
-    "macro_features": None,   # pre-computed BTC macro features
-    "aligned_btc": None,      # raw aligned BTC dataset (for Close prices)
-    "test_dates": [],         # ISO date strings, dropdown source
+state = {
+    "oof_cache":      {},   # (asset, model, arch) -> DataFrame
+    "price_cache":    {},   # asset -> Close Series
+    "test_dates":     {},   # asset -> list[str]
+    "equity_cache":   {},   # asset -> DataFrame (model_rule columns)
+    "stage1_oof":     {},   # asset -> Stage 1 RF tuned OOF (for context)
+    "stage2_regime":  {},   # asset -> regime FSM CSV
 }
 
 
-# ---------- request / response models ----------
-
-class PredictionRequest(BaseModel):
-    symbol: str = "BTC"
-    mode: Literal["date", "live"] = "date"
-    date: str | None = None
-    model: Literal["lda", "mlp"] = "lda"
-
-
 class PredictionResponse(BaseModel):
-    signal: str
-    confidence: float
-    date: str
-    price: float | None = None
-    trend: dict[str, float]
-    macro_regime: dict[str, float]
-    signal_probs: dict[str, float]
-    mode: str
-    model: str
+    asset:        str
+    date:         str
+    arch:         str
+    model:        str
+    rule:         str
+    signal:       str
+    confidence:   float
+    probs:        dict[str, float]
+    stage1_trend: dict[str, float] | None = None
+    stage2_regime: str | None = None
+    price:        float
+    forward_return_5d: float | None = None
 
-
-# ---------- startup ----------
 
 @app.on_event("startup")
-async def load_pipelines() -> None:
-    models_dir = PROJECT_ROOT / "app" / "models"
-    proc_dir = PROJECT_ROOT / "data" / "processed"
+async def warmup():
+    proc = PROJECT_ROOT / "data" / "processed"
+    for asset in ASSETS:
+        # Aligned OHLCV
+        ohlcv = pd.read_csv(proc / f"{asset.lower()}_aligned_v5.csv",
+                            index_col=0, parse_dates=True)
+        state["price_cache"][asset] = ohlcv["Close"]
 
-    # Pipelines (LDA + MLP) — both share the same Stage 1 LDA + Stage 2 GMM artifact
-    for variant in ("lda", "mlp"):
-        pipeline_dir = models_dir / f"pipeline_{variant}"
-        if pipeline_dir.exists():
-            state["pipelines"][variant] = HierarchicalSoftPipeline.load(pipeline_dir)
-            print(f"[startup] Loaded pipeline_{variant} from {pipeline_dir}")
-        else:
-            print(f"[startup] WARNING: {pipeline_dir} missing — {variant} predictions unavailable")
+        # Pre-load best per-asset OOF (the one shown by default)
+        best = BEST_PER_ASSET[asset]
+        oof_path = proc / (f"{asset.lower()}_stage3_oof_{best['model']}_"
+                           f"v5_tuned_{best['arch']}.csv")
+        if oof_path.exists():
+            df = pd.read_csv(oof_path, index_col=0, parse_dates=True)
+            state["oof_cache"][(asset, best["model"], best["arch"])] = df
+            state["test_dates"][asset] = [d.strftime("%Y-%m-%d") for d in df.index]
+            print(f"[startup] {asset} default OOF loaded: "
+                  f"{best['arch']}/{best['model']}, {len(df)} dates")
 
-    artifact_path = models_dir / "stage2_cluster_artifact.joblib"
-    if artifact_path.exists():
-        state["stage2_artifact"] = joblib.load(artifact_path)
-        print(f"[startup] Loaded Stage 2 cluster artifact ({state['stage2_artifact']['method']}, "
-              f"{state['stage2_artifact']['n_clusters']} clusters)")
+        # Stage 1 RF tuned OOF (for context/transparency)
+        s1_path = proc / f"{asset.lower()}_stage1_oof_random_forest_v5_tuned.csv"
+        if s1_path.exists():
+            state["stage1_oof"][asset] = pd.read_csv(s1_path, index_col=0, parse_dates=True)
 
-    # Pre-computed features for date-based prediction
-    try:
-        state["stage1_features"] = pd.read_csv(
-            proc_dir / "btc_features_stage1.csv", index_col=0, parse_dates=True,
-        )
-        state["stage3_features"] = pd.read_csv(
-            proc_dir / "btc_features_stage3.csv", index_col=0, parse_dates=True,
-        )
-        state["macro_features"] = pd.read_csv(
-            proc_dir / "btc_features_macro.csv", index_col=0, parse_dates=True,
-        )
-        state["aligned_btc"] = pd.read_csv(
-            proc_dir / "btc_aligned.csv", index_col=0, parse_dates=True,
-        )
-        # Test dates = last 15% of aligned data, valid feature rows
-        n = len(state["aligned_btc"])
-        test_start = int(n * 0.85)
-        candidate_dates = state["aligned_btc"].index[test_start:]
-        valid_mask = state["stage1_features"].dropna().index.intersection(
-            state["stage3_features"].dropna().index
-        ).intersection(state["macro_features"].dropna().index)
-        test_dates = [d for d in candidate_dates if d in valid_mask]
-        state["test_dates"] = [d.strftime("%Y-%m-%d") for d in test_dates]
-        print(f"[startup] Pre-computed features loaded; {len(state['test_dates'])} test dates available")
-    except FileNotFoundError as e:
-        print(f"[startup] WARNING: could not load pre-computed features ({e}). Date mode will fail.")
+        # Stage 2 FSM regime
+        s2_path = proc / f"{asset.lower()}_regime_labels_composite_macro_v5_v5.csv"
+        if s2_path.exists():
+            state["stage2_regime"][asset] = pd.read_csv(s2_path, index_col=0, parse_dates=True)
+
+        # Equity curves (Phase 5.1 has multi-arch; we use that)
+        eq_path = PROJECT_ROOT / "reports" / "Phase5.1_arch_ablation" / f"v5_p5_arch_equity_curves_{asset.lower()}.csv"
+        if eq_path.exists():
+            state["equity_cache"][asset] = pd.read_csv(eq_path, index_col=0, parse_dates=True)
+            print(f"[startup] {asset} equity curves loaded: {state['equity_cache'][asset].shape[1]} curves")
+    print("[startup] V5 demo backend ready")
 
 
-# ---------- helpers ----------
-
-def _build_stage_inputs_for_date(date_str: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, float]:
-    """Look up pre-computed features for a single date and return Stage 1/macro/Stage 3 frames."""
-    if state["stage1_features"] is None:
-        raise HTTPException(status_code=503, detail="Pre-computed features not loaded")
-
-    try:
-        ts = pd.Timestamp(date_str)
-    except Exception:
-        raise HTTPException(status_code=400, detail=f"Invalid date format: {date_str!r}; expected YYYY-MM-DD")
-
-    if ts not in state["stage1_features"].index:
-        raise HTTPException(status_code=404, detail=f"No features for date {date_str}")
-
-    artifact = state["stage2_artifact"]
-    macro_cols = artifact["feature_names"] if artifact else []
-    macro_subset = state["macro_features"].loc[[ts], macro_cols] if macro_cols else state["macro_features"].loc[[ts]]
-
-    s1 = state["stage1_features"].loc[[ts]]
-    s3 = state["stage3_features"].loc[[ts]]
-    price = float(state["aligned_btc"].loc[ts, "Close"])
-    return s1, macro_subset, s3, price
-
-
-def _build_stage_inputs_live(symbol: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, float, str]:
-    """Fetch live OHLCV + macro from yfinance and compute the latest feature row."""
-    ticker_crypto = f"{symbol}-USD"
-    ohlcv = yf.Ticker(ticker_crypto).history(period="2y", interval="1d")
-    if ohlcv.empty:
-        raise HTTPException(status_code=502, detail=f"yfinance returned no data for {ticker_crypto}")
-    ohlcv.index = pd.to_datetime(ohlcv.index).tz_localize(None)
-
-    trend = compute_trend_indicators(ohlcv)
-    osc = compute_oscillator_indicators(ohlcv)
-    vol = compute_volatility_indicators(ohlcv)
-    volu = compute_volume_indicators(ohlcv)
-    s1_live = trend.tail(1)
-    s3_live = pd.concat([osc.tail(1), vol.tail(1), volu.tail(1)], axis=1)
-
-    # Macro: assemble the same 8 features the Stage 2 artifact was trained on
-    artifact = state["stage2_artifact"]
-    if artifact is None:
-        raise HTTPException(status_code=503, detail="Stage 2 artifact not loaded")
-    macro_cols = artifact["feature_names"]
-
-    # Reuse last 1 year of aligned macro from local CSV; only the live row would be missing
-    # (good enough for a demo; replacing with live yfinance fetch for all 12 macros is slow)
-    if state["macro_features"] is None:
-        raise HTTPException(status_code=503, detail="Macro features cache not loaded; live mode unavailable")
-    last_known = state["macro_features"][macro_cols].dropna().iloc[[-1]]
-
-    last_price = float(ohlcv["Close"].iloc[-1])
-    last_date = ohlcv.index[-1].strftime("%Y-%m-%d")
-    return s1_live, last_known, s3_live, last_price, last_date
-
-
-def _run_pipeline(model_key: str, s1: pd.DataFrame, macro: pd.DataFrame, s3: pd.DataFrame) -> dict:
-    pipeline = state["pipelines"].get(model_key)
-    if pipeline is None:
-        raise HTTPException(status_code=503, detail=f"Pipeline {model_key!r} not loaded")
-
-    proba = pipeline.predict_proba(s1, macro, s3)
-    signal_probs = proba["signal_probs"][0]
-    signal_idx = int(np.argmax(signal_probs))
-    signal_label = str(pipeline.stage3.classes_[signal_idx])
-    confidence = float(signal_probs[signal_idx])
-
-    artifact = state["stage2_artifact"]
-    semantic = artifact["semantic_map"] if artifact else {i: f"cluster_{i}" for i in range(len(proba["regime_probs"][0]))}
-
-    return {
-        "signal": signal_label,
-        "confidence": confidence,
-        "trend": {str(c): float(p) for c, p in zip(pipeline.stage1.classes_, proba["trend_probs"][0])},
-        "macro_regime": {semantic.get(i, f"cluster_{i}"): float(p) for i, p in enumerate(proba["regime_probs"][0])},
-        "signal_probs": {str(c): float(p) for c, p in zip(pipeline.stage3.classes_, proba["signal_probs"][0])},
-    }
+def _load_oof(asset: str, model: str, arch: str) -> pd.DataFrame:
+    key = (asset, model, arch)
+    if key in state["oof_cache"]:
+        return state["oof_cache"][key]
+    proc = PROJECT_ROOT / "data" / "processed"
+    path = proc / f"{asset.lower()}_stage3_oof_{model}_v5_tuned_{arch}.csv"
+    if not path.exists():
+        raise HTTPException(status_code=404,
+                            detail=f"OOF file not found: {path.name}")
+    df = pd.read_csv(path, index_col=0, parse_dates=True)
+    state["oof_cache"][key] = df
+    return df
 
 
 # ---------- endpoints ----------
 
 @app.get("/health")
-async def health_check() -> dict:
+async def health() -> dict:
     return {
-        "status": "ok",
-        "pipelines_loaded": list(state["pipelines"].keys()),
-        "stage2_loaded": state["stage2_artifact"] is not None,
-        "test_dates_count": len(state["test_dates"]),
-        "ready": bool(state["pipelines"]) and state["stage2_artifact"] is not None,
+        "status":           "ok",
+        "ready":            len(state["price_cache"]) > 0,
+        "assets_loaded":    list(state["price_cache"].keys()),
+        "default_oof_loaded": list(state["oof_cache"].keys()),
+        "test_dates": {a: len(d) for a, d in state["test_dates"].items()},
     }
 
 
-@app.get("/test_dates/{symbol}")
-async def test_dates(symbol: str) -> dict:
-    """Return the list of dates the demo dropdown can offer (precomputed features only)."""
-    if symbol.upper() != "BTC":
-        raise HTTPException(status_code=400, detail="MVP supports BTC only; ETH planned for second iteration")
-    return {"symbol": symbol.upper(), "dates": state["test_dates"]}
+@app.get("/assets")
+async def assets() -> dict:
+    return {
+        "assets": ASSETS,
+        "archs":  ARCHS,
+        "rules":  RULES,
+        "models": MODELS,
+        "best":   BEST_PER_ASSET,
+    }
 
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict(request: PredictionRequest) -> PredictionResponse:
-    if request.symbol.upper() != "BTC":
-        raise HTTPException(status_code=400, detail="MVP supports BTC only")
-    if not state["pipelines"]:
-        raise HTTPException(status_code=503, detail="No pipelines loaded; train models first")
+@app.get("/test_dates/{asset}")
+async def test_dates(asset: str) -> dict:
+    asset = asset.upper()
+    if asset not in ASSETS:
+        raise HTTPException(status_code=400, detail=f"Unknown asset: {asset}")
+    if asset not in state["test_dates"]:
+        raise HTTPException(status_code=503, detail="OOF dates not loaded yet")
+    return {"asset": asset, "dates": state["test_dates"][asset]}
 
-    if request.mode == "date":
-        if not request.date:
-            raise HTTPException(status_code=400, detail="`date` field required for date mode")
-        s1, macro, s3, price = _build_stage_inputs_for_date(request.date)
-        result = _run_pipeline(request.model, s1, macro, s3)
-        return PredictionResponse(
-            **result,
-            date=request.date,
-            price=price,
-            mode="date",
-            model=request.model,
-        )
 
-    # live mode
+@app.get("/predict", response_model=PredictionResponse)
+async def predict(
+    asset: str = Query(..., description="BTC or ETH"),
+    date:  str = Query(..., description="YYYY-MM-DD, must be in test_dates"),
+    arch:  str = Query("default", description="flat|2stage_trend|2stage_macro|3stage_full|default"),
+    model: str = Query("default", description="xgboost|lightgbm|random_forest|mlp|default"),
+    rule:  str = Query("default", description="stateful|defensive|prob_weighted|default"),
+) -> PredictionResponse:
+    asset = asset.upper()
+    if asset not in ASSETS:
+        raise HTTPException(status_code=400, detail=f"Unknown asset: {asset}")
+
+    # Resolve "default" to BEST_PER_ASSET
+    best = BEST_PER_ASSET[asset]
+    if arch == "default":  arch  = best["arch"]
+    if model == "default": model = best["model"]
+    if rule == "default":  rule  = best["rule"]
+
+    if arch not in ARCHS:   raise HTTPException(status_code=400, detail=f"Unknown arch: {arch}")
+    if model not in MODELS: raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
+    if rule not in RULES:   raise HTTPException(status_code=400, detail=f"Unknown rule: {rule}")
+
     try:
-        s1, macro, s3, price, last_date = _build_stage_inputs_live(request.symbol)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Live data fetch failed: {e}")
+        ts = pd.Timestamp(date)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {date}")
 
-    result = _run_pipeline(request.model, s1, macro, s3)
+    oof = _load_oof(asset, model, arch)
+    if ts not in oof.index:
+        raise HTTPException(status_code=404,
+                            detail=f"No OOF prediction for {asset} on {date}")
+
+    row = oof.loc[ts]
+    probs = {
+        "Buy":  float(row["P_Buy"]),
+        "Hold": float(row["P_Hold"]),
+        "Sell": float(row["P_Sell"]),
+    }
+    pred_label = str(row["pred_label"])
+    confidence = probs[pred_label]
+
+    price = float(state["price_cache"][asset].loc[ts])
+
+    # Forward 5-day return for context (educational; not a feature)
+    px = state["price_cache"][asset]
+    fwd = None
+    if (loc := px.index.get_loc(ts)) + 5 < len(px):
+        fwd = float((px.iloc[loc + 5] - px.iloc[loc]) / px.iloc[loc])
+
+    # Stage 1 trend probabilities (RF tuned, context)
+    s1_trend = None
+    if asset in state["stage1_oof"]:
+        s1 = state["stage1_oof"][asset]
+        if ts in s1.index:
+            s1_trend = {
+                "downtrend": float(s1.loc[ts, "P_downtrend"]),
+                "range":     float(s1.loc[ts, "P_range"]),
+                "uptrend":   float(s1.loc[ts, "P_uptrend"]),
+            }
+
+    # Stage 2 regime (FSM)
+    s2_regime = None
+    if asset in state["stage2_regime"]:
+        s2 = state["stage2_regime"][asset]
+        if ts in s2.index:
+            s2_regime = str(s2.loc[ts, "regime_label"])
+
     return PredictionResponse(
-        **result,
-        date=last_date,
-        price=price,
-        mode="live",
-        model=request.model,
+        asset=asset, date=date, arch=arch, model=model, rule=rule,
+        signal=pred_label, confidence=confidence, probs=probs,
+        stage1_trend=s1_trend, stage2_regime=s2_regime,
+        price=price, forward_return_5d=fwd,
     )
 
 
-@app.get("/indicators/{symbol}")
-async def get_indicators(symbol: str) -> dict:
-    """Convenience endpoint for the frontend to show a few key indicator values."""
-    if symbol.upper() != "BTC":
-        raise HTTPException(status_code=400, detail="MVP supports BTC only")
-    try:
-        ohlcv = yf.Ticker(f"{symbol}-USD").history(period="6mo", interval="1d")
-        ohlcv.index = pd.to_datetime(ohlcv.index).tz_localize(None)
-        trend = compute_trend_indicators(ohlcv)
-        osc = compute_oscillator_indicators(ohlcv)
-        latest = pd.concat([trend.iloc[-1], osc.iloc[-1]])
-        return {
-            "symbol": symbol.upper(),
-            "date": ohlcv.index[-1].strftime("%Y-%m-%d"),
-            "price": float(ohlcv["Close"].iloc[-1]),
-            "indicators": {k: round(float(v), 4) if pd.notna(v) else None for k, v in latest.items()},
-        }
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
+@app.get("/equity/{asset}")
+async def equity(asset: str) -> dict:
+    asset = asset.upper()
+    if asset not in state["equity_cache"]:
+        raise HTTPException(status_code=503, detail="Equity cache not loaded")
+    eq = state["equity_cache"][asset]
+    best = BEST_PER_ASSET[asset]
+    best_col = f"{best['arch']}_{best['model']}_{best['rule']}"
 
+    if best_col not in eq.columns:
+        raise HTTPException(status_code=500, detail=f"Best column missing: {best_col}")
 
-# ---------- static frontend ----------
-
-static_dir = Path(__file__).parent / "static"
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    bh_col = "BUY_AND_HOLD"
+    return {
+        "asset":    asset,
+        "best_label": f"{best['arch']}/{best['model']}/{best['rule']}",
+        "dates":    [d.strftime("%Y-%m-%d") for d in eq.index],
+        "best":     [None if pd.isna(v) else float(v) for v in eq[best_col]],
+        "buy_hold": [None if pd.isna(v) else float(v) for v in eq[bh_col]] if bh_col in eq.columns else [],
+    }
 
 
 @app.get("/")
 async def root():
-    index_path = static_dir / "index.html"
-    if index_path.exists():
-        return FileResponse(str(index_path))
-    return {"message": "Crypto Signal Classifier API. Visit /docs for API documentation."}
+    return FileResponse(PROJECT_ROOT / "app" / "static" / "index.html")

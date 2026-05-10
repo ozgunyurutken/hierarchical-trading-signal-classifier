@@ -1,142 +1,143 @@
-/**
- * Crypto Signal Classifier — Frontend (MVP)
- */
+// V5 Hierarchical Trading Signal Classifier — minimal frontend.
+// Reads OOF predictions via FastAPI backend (no on-the-fly inference).
 
-const API_BASE = "";
+const $ = (id) => document.getElementById(id);
+let equityChart = null;
 
-async function loadTestDates() {
-    const select = document.getElementById("date-select");
-    try {
-        const response = await fetch(`${API_BASE}/test_dates/BTC`);
-        if (!response.ok) throw new Error("Failed to load dates");
-        const data = await response.json();
-        select.innerHTML = "";
-        if (!data.dates.length) {
-            select.innerHTML = '<option value="">no test dates available</option>';
-            return;
-        }
-        // Show most recent dates first (better UX for the demo)
-        const sorted = [...data.dates].sort((a, b) => b.localeCompare(a));
-        for (const d of sorted) {
-            const opt = document.createElement("option");
-            opt.value = d;
-            opt.textContent = d;
-            select.appendChild(opt);
-        }
-    } catch (err) {
-        select.innerHTML = `<option value="">error: ${err.message}</option>`;
-    }
+async function init() {
+  const health = await fetch("/health").then(r => r.json());
+  $("health").textContent = JSON.stringify(health, null, 2);
+
+  const meta = await fetch("/assets").then(r => r.json());
+  const assetSel = $("asset");
+  for (const a of meta.assets) {
+    const opt = document.createElement("option");
+    opt.value = a; opt.textContent = a;
+    assetSel.appendChild(opt);
+  }
+
+  assetSel.addEventListener("change", onAssetChange);
+  $("predictBtn").addEventListener("click", onPredict);
+  await onAssetChange();
 }
 
-async function getPredictionByDate() {
-    const symbol = document.getElementById("symbol-select").value;
-    const date = document.getElementById("date-select").value;
-    const model = document.getElementById("model-select").value;
-    if (!date) {
-        showError("Please select a date.");
-        return;
-    }
-    await runPrediction({ symbol, mode: "date", date, model });
+async function onAssetChange() {
+  const asset = $("asset").value;
+  const dates = await fetch(`/test_dates/${asset}`).then(r => r.json());
+  const dateSel = $("date");
+  dateSel.innerHTML = "";
+  // Show recent dates first; user usually wants the latest
+  for (const d of dates.dates.slice().reverse()) {
+    const opt = document.createElement("option");
+    opt.value = d; opt.textContent = d;
+    dateSel.appendChild(opt);
+  }
+  await loadEquity(asset);
 }
 
-async function getLivePrediction() {
-    const symbol = document.getElementById("symbol-select").value;
-    const model = document.getElementById("model-select").value;
-    await runPrediction({ symbol, mode: "live", model });
+async function onPredict() {
+  const asset = $("asset").value;
+  const date  = $("date").value;
+  const arch  = $("arch").value;
+  const model = $("model").value;
+  const rule  = $("rule").value;
+
+  const url = `/predict?asset=${asset}&date=${date}&arch=${arch}&model=${model}&rule=${rule}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert(`Predict failed: ${res.status} ${err.detail || ""}`);
+    return;
+  }
+  const data = await res.json();
+
+  $("result").classList.remove("hidden");
+
+  const lbl = $("signalLabel");
+  lbl.textContent = data.signal;
+  lbl.className = "signal-label " + data.signal.toLowerCase();
+  $("signalConfidence").textContent =
+    `confidence ${(data.confidence * 100).toFixed(1)}% · arch=${data.arch} · model=${data.model} · rule=${data.rule}`;
+
+  $("pBuy").textContent  = data.probs.Buy.toFixed(3);
+  $("pHold").textContent = data.probs.Hold.toFixed(3);
+  $("pSell").textContent = data.probs.Sell.toFixed(3);
+  $("pBuyFill").style.width  = (data.probs.Buy  * 100) + "%";
+  $("pHoldFill").style.width = (data.probs.Hold * 100) + "%";
+  $("pSellFill").style.width = (data.probs.Sell * 100) + "%";
+
+  $("price").textContent = "$" + data.price.toFixed(2);
+  $("s2regime").textContent = data.stage2_regime || "—";
+
+  if (data.stage1_trend) {
+    const t = data.stage1_trend;
+    const argmax = Object.entries(t).sort((a,b) => b[1] - a[1])[0];
+    $("s1trend").textContent =
+      `${argmax[0]} (${(argmax[1]*100).toFixed(1)}%) · D ${t.downtrend.toFixed(2)} R ${t.range.toFixed(2)} U ${t.uptrend.toFixed(2)}`;
+  } else {
+    $("s1trend").textContent = "—";
+  }
+
+  if (data.forward_return_5d !== null && data.forward_return_5d !== undefined) {
+    const fwd = data.forward_return_5d;
+    const sign = fwd >= 0 ? "+" : "";
+    $("fwd").textContent = `${sign}${(fwd*100).toFixed(2)}%  (post-hoc, label-side info)`;
+  } else {
+    $("fwd").textContent = "—";
+  }
 }
 
-async function runPrediction(payload) {
-    showLoading(true);
-    hideError();
-    hideResult();
+async function loadEquity(asset) {
+  const data = await fetch(`/equity/${asset}`).then(r => r.json());
+  if (data.dates.length === 0) {
+    $("equityLabel").textContent = "(no equity data)";
+    return;
+  }
+  $("equityLabel").textContent = `Best Stage 3: ${data.best_label} (vs Buy & Hold)`;
 
-    try {
-        const response = await fetch(`${API_BASE}/predict`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(err.detail || "Prediction failed");
-        }
-        const data = await response.json();
-        displayResult(data);
-    } catch (err) {
-        showError(err.message);
-    } finally {
-        showLoading(false);
-    }
+  const ctx = $("equityChart").getContext("2d");
+  if (equityChart) equityChart.destroy();
+  equityChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: data.dates,
+      datasets: [
+        {
+          label: `Stage 3: ${data.best_label}`,
+          data: data.best,
+          borderColor: asset === "BTC" ? "#f7931a" : "#627eea",
+          borderWidth: 1.6,
+          pointRadius: 0,
+          tension: 0.0,
+        },
+        {
+          label: "Buy & Hold",
+          data: data.buy_hold,
+          borderColor: "#666666",
+          borderDash: [4, 4],
+          borderWidth: 1.4,
+          pointRadius: 0,
+          tension: 0.0,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: { display: true, ticks: { maxTicksLimit: 8 } },
+        y: { type: "logarithmic", title: { display: true, text: "Equity (log, $1 start)" } },
+      },
+      plugins: {
+        legend: { position: "top" },
+        tooltip: { mode: "index", intersect: false },
+      },
+    },
+  });
 }
 
-function displayResult(data) {
-    const section = document.getElementById("result-section");
-    section.classList.remove("hidden");
-
-    const meta = document.getElementById("result-meta");
-    const priceStr = data.price != null ? `· $${data.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "";
-    meta.textContent = `· ${data.symbol || "BTC"} · ${data.date} · ${data.mode} · ${data.model.toUpperCase()} ${priceStr}`;
-
-    const badge = document.getElementById("signal-badge");
-    document.getElementById("signal-text").textContent = data.signal;
-    badge.className = "signal-badge";
-    if (data.signal === "Buy") badge.classList.add("signal-buy");
-    else if (data.signal === "Sell") badge.classList.add("signal-sell");
-    else badge.classList.add("signal-hold");
-
-    const pct = (data.confidence * 100).toFixed(1);
-    document.getElementById("confidence-bar").style.width = `${pct}%`;
-    document.getElementById("confidence-value").textContent = `${pct}%`;
-
-    if (data.trend) {
-        renderProbBars("trend-probs", data.trend, {
-            "Uptrend": "#2ecc71",
-            "Downtrend": "#e74c3c",
-            "Sideways": "#f1c40f",
-        });
-    }
-    if (data.macro_regime) {
-        renderProbBars("regime-probs", data.macro_regime, {
-            "Risk-On": "#2ecc71",
-            "Risk-Off": "#e74c3c",
-            "Neutral": "#f1c40f",
-        });
-    }
-    if (data.signal_probs) {
-        renderProbBars("signal-probs", data.signal_probs, {
-            "Buy": "#2ecc71",
-            "Sell": "#e74c3c",
-            "Hold": "#f1c40f",
-        });
-    }
-}
-
-function renderProbBars(containerId, probs, colors) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = "";
-    for (const [label, prob] of Object.entries(probs)) {
-        const pct = (prob * 100).toFixed(1);
-        const color = colors[label] || "#5b6eae";
-        const item = document.createElement("div");
-        item.className = "prob-item";
-        item.innerHTML = `
-            <span class="label">${label}</span>
-            <div class="bar"><div class="bar-fill" style="width: ${pct}%; background: ${color};"></div></div>
-            <span class="value">${pct}%</span>
-        `;
-        container.appendChild(item);
-    }
-}
-
-function showLoading(show) { document.getElementById("loading").classList.toggle("hidden", !show); }
-function showError(msg) {
-    document.getElementById("error-message").textContent = msg;
-    document.getElementById("error-section").classList.remove("hidden");
-}
-function hideError() { document.getElementById("error-section").classList.add("hidden"); }
-function hideResult() { document.getElementById("result-section").classList.add("hidden"); }
-
-document.addEventListener("DOMContentLoaded", loadTestDates);
-document.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) getPredictionByDate();
+init().catch(e => {
+  console.error(e);
+  alert("Init failed: " + e.message);
 });

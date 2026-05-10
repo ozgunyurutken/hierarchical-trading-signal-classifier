@@ -1,98 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Signal Classifier</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>V5 Hierarchical Crypto Signal Classifier</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Crypto Signal Classifier</h1>
-            <p class="subtitle">Three-Stage Hierarchical ML Pipeline · BBL514E Pattern Recognition</p>
-        </header>
+  <header>
+    <h1>V5 Hierarchical Trading Signal Classifier</h1>
+    <p class="subtitle">
+      Three-stage soft-fusion: <b>Stage 1</b> (Trend) → <b>Stage 2</b> (Macro Regime) → <b>Stage 3</b> (Buy/Sell/Hold)
+    </p>
+    <p class="course">BBL514E Pattern Recognition · Yurutken (707251003) &amp; Bilgin (504251013) · Spring 2026</p>
+  </header>
 
-        <main>
-            <!-- Date-based prediction (primary, demo-safe) -->
-            <section class="card">
-                <h2>Get Prediction by Date</h2>
-                <p class="hint">Test set tarihleri (son %15 chronological). Pre-computed features → no internet needed.</p>
-                <div class="input-group">
-                    <label for="symbol-select">Symbol:</label>
-                    <select id="symbol-select">
-                        <option value="BTC">Bitcoin (BTC)</option>
-                    </select>
-                    <label for="date-select">Date:</label>
-                    <select id="date-select">
-                        <option value="">— loading dates —</option>
-                    </select>
-                    <label for="model-select">Model:</label>
-                    <select id="model-select">
-                        <option value="lda">LDA</option>
-                        <option value="mlp">MLP</option>
-                    </select>
-                    <button id="predict-btn" onclick="getPredictionByDate()">Get Prediction</button>
-                </div>
-            </section>
+  <main>
+    <section class="card">
+      <h2>Predict</h2>
+      <div class="row">
+        <div class="field">
+          <label for="asset">Asset</label>
+          <select id="asset"></select>
+        </div>
+        <div class="field">
+          <label for="date">Date</label>
+          <select id="date"></select>
+        </div>
+        <div class="field">
+          <label for="arch">Architecture</label>
+          <select id="arch">
+            <option value="default" selected>default (best per asset)</option>
+            <option value="flat">flat (6 osc only)</option>
+            <option value="2stage_trend">2-Stage Trend (+ S1)</option>
+            <option value="2stage_macro">2-Stage Macro (+ S2)</option>
+            <option value="3stage_full">3-Stage Full (16 feat)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="model">Model</label>
+          <select id="model">
+            <option value="default" selected>default</option>
+            <option value="xgboost">XGBoost</option>
+            <option value="lightgbm">LightGBM</option>
+            <option value="random_forest">Random Forest</option>
+            <option value="mlp">MLP</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="rule">Trading Rule</label>
+          <select id="rule">
+            <option value="default" selected>default</option>
+            <option value="stateful">Stateful (Buy=in, Sell=out, Hold=stay)</option>
+            <option value="defensive">Defensive (Buy=in, else=cash)</option>
+            <option value="prob_weighted">Prob-weighted (size = P_Buy − P_Sell)</option>
+          </select>
+        </div>
+        <div class="field">
+          <button id="predictBtn">Predict</button>
+        </div>
+      </div>
 
-            <!-- Live prediction (best-effort, requires internet) -->
-            <section class="card">
-                <h2>Live Prediction (yfinance)</h2>
-                <p class="hint">Latest market data via yfinance. Internet bağlantısı gerekir; offline ise üstteki tarih dropdown'unu kullan.</p>
-                <div class="input-group">
-                    <button onclick="getLivePrediction()">Get Live Prediction</button>
-                </div>
-            </section>
+      <div id="result" class="hidden">
+        <div class="signal-block" id="signalBlock">
+          <span class="signal-label" id="signalLabel">—</span>
+          <span class="signal-confidence" id="signalConfidence">—</span>
+        </div>
+        <div class="probs-row">
+          <div class="prob-bar"><div class="prob-fill buy"  id="pBuyFill"></div><span>Buy: <b id="pBuy">—</b></span></div>
+          <div class="prob-bar"><div class="prob-fill hold" id="pHoldFill"></div><span>Hold: <b id="pHold">—</b></span></div>
+          <div class="prob-bar"><div class="prob-fill sell" id="pSellFill"></div><span>Sell: <b id="pSell">—</b></span></div>
+        </div>
+        <div class="meta-row">
+          <div class="meta">Price: <b id="price">—</b></div>
+          <div class="meta">Stage 2 regime: <b id="s2regime">—</b></div>
+          <div class="meta">Stage 1 trend (best): <b id="s1trend">—</b></div>
+          <div class="meta">Forward 5d return: <b id="fwd">—</b></div>
+        </div>
+      </div>
+    </section>
 
-            <!-- Result -->
-            <section id="result-section" class="card hidden">
-                <h2>Prediction Result <span id="result-meta" class="hint"></span></h2>
-                <div class="signal-display">
-                    <div id="signal-badge" class="signal-badge">
-                        <span id="signal-text">--</span>
-                    </div>
-                    <div class="confidence-container">
-                        <label>Confidence</label>
-                        <div class="progress-bar">
-                            <div id="confidence-bar" class="progress-fill"></div>
-                        </div>
-                        <span id="confidence-value">0%</span>
-                    </div>
-                </div>
+    <section class="card">
+      <h2>Equity Curves (best per-asset)</h2>
+      <p class="explainer">
+        Cumulative equity from $1 starting capital over the OOF span (walk-forward predictions, 0.1% transaction cost).
+        Best Stage 3 strategy compared with Buy &amp; Hold benchmark.
+      </p>
+      <canvas id="equityChart"></canvas>
+      <div id="equityLabel" class="explainer"></div>
+    </section>
 
-                <div class="stage-breakdown">
-                    <div class="stage-card">
-                        <h3>Stage 1: Trend</h3>
-                        <div id="trend-probs" class="prob-bars"></div>
-                    </div>
-                    <div class="stage-card">
-                        <h3>Stage 2: Macro Regime</h3>
-                        <div id="regime-probs" class="prob-bars"></div>
-                    </div>
-                    <div class="stage-card">
-                        <h3>Stage 3: Signal</h3>
-                        <div id="signal-probs" class="prob-bars"></div>
-                    </div>
-                </div>
-            </section>
+    <section class="card small">
+      <h2>System Info</h2>
+      <pre id="health"></pre>
+    </section>
+  </main>
 
-            <section id="error-section" class="card hidden error-card">
-                <h2>Error</h2>
-                <p id="error-message"></p>
-            </section>
+  <footer>
+    <small>V5 backend serves walk-forward OOF predictions deterministically. No on-the-fly inference.</small>
+  </footer>
 
-            <div id="loading" class="hidden">
-                <div class="spinner"></div>
-                <p>Computing prediction...</p>
-            </div>
-        </main>
-
-        <footer>
-            <p>BBL514E Pattern Recognition Term Project · 2026 · MVP build</p>
-        </footer>
-    </div>
-
-    <script src="/static/app.js"></script>
+  <script src="/static/app.js"></script>
 </body>
 </html>
