@@ -59,6 +59,8 @@ const ST = {
   labMode: "actual",   // "actual" | "custom"
   labFeatures: {},     // current slider values (Custom mode)
   labDebounce: null,
+  labBaselineProbs: null,  // first /predict_custom result for actual-feature row,
+                           // used as comparison reference in Custom mode
   heatmap: null,
 };
 
@@ -231,57 +233,25 @@ function renderHero(bundle) {
   });
   ST.hero.volume.setData(volumeData);
 
-  // Buy/Sell markers (only at signal flips for stateful; for prob/defensive
-  // overlay individual signal days). We use trade entries/exits from the bundle.
-  const markers = [];
-  for (const t of bundle.trades) {
-    markers.push({
-      time:  bundle.dates[t.entry_idx],
-      position: "belowBar", color: COLORS.buy, shape: "arrowUp",
-      text:  "BUY",
-    });
-    if (t.exit_date) {
-      markers.push({
-        time: bundle.dates[t.exit_idx],
-        position: "aboveBar",
-        color: t.won ? COLORS.buy : COLORS.sell,
-        shape: "arrowDown",
-        text: t.won ? `+${(t.return_pct * 100).toFixed(1)}%` : `${(t.return_pct * 100).toFixed(1)}%`,
-      });
-    }
-  }
-  ST.hero.candle.setMarkers(markers);
+  // Trade markers removed: 179+ markers with text labels overlap and become
+  // unreadable. Trade details are shown in the side panels (Outcomes + Trade
+  // simulation). Hero chart stays clean — only the selected-date marker is
+  // drawn by highlightHeroDate().
+  ST.hero.candle.setMarkers([]);
 
   ST.hero.chart.timeScale().fitContent();
 }
 
 function highlightHeroDate(bundle, idx) {
-  // Add a "selected" marker on top of the existing trade markers.
+  // Single marker: the date the user has selected (scrubber position).
   const sel = bundle.dates[idx];
-  const trades = bundle.trades;
-  const markers = [];
-  for (const t of trades) {
-    markers.push({
-      time:  bundle.dates[t.entry_idx],
-      position: "belowBar", color: COLORS.buy, shape: "arrowUp", text: "BUY",
-    });
-    if (t.exit_date) {
-      markers.push({
-        time: bundle.dates[t.exit_idx],
-        position: "aboveBar",
-        color: t.won ? COLORS.buy : COLORS.sell,
-        shape: "arrowDown",
-        text: t.won ? `+${(t.return_pct * 100).toFixed(1)}%` : `${(t.return_pct * 100).toFixed(1)}%`,
-      });
-    }
-  }
-  markers.push({
+  ST.hero.candle.setMarkers([{
     time:  sel,
-    position: "inBar", color: "#4d8aff", shape: "circle", text: "",
-  });
-  // Sort markers by time (lightweight-charts requires monotonic order)
-  markers.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0);
-  ST.hero.candle.setMarkers(markers);
+    position: "inBar",
+    color: "#4d8aff",
+    shape: "circle",
+    text: "",
+  }]);
 }
 
 // ───────────────────────── Scrubber ─────────────────────────
@@ -824,6 +794,9 @@ function syncLabFromActual() {
   const b = ST.bundle, i = ST.idx;
   const features = readActualFeatures(b, i);
   ST.labFeatures = { ...features };
+  // Reset baseline so the first /predict_custom result will set a fresh
+  // reference for delta comparison in Custom mode.
+  ST.labBaselineProbs = null;
   // Update slider DOM
   document.querySelectorAll("#labBody input[type=range]").forEach(inp => {
     const k = inp.dataset.key;
@@ -837,8 +810,11 @@ function syncLabFromActual() {
     }
   });
   updateLabFromArrow(b, i);
-  // In actual mode, output mirrors the OOF prediction (no /predict_custom call)
-  paintLabOutput(b.active_probs.Buy[i], b.active_probs.Hold[i], b.active_probs.Sell[i]);
+  // Single source of truth in Lab Mode: always run the final-fit model so that
+  // toggling Actual ↔ Custom never changes the prediction unless features
+  // actually change. Walk-forward OOF probs are still shown elsewhere
+  // (signal panel, equity, heatmap) — they back the paper-grade numbers.
+  runLabPredict();
 }
 
 function readActualFeatures(b, i) {
@@ -897,6 +873,11 @@ async function runLabPredict() {
     return;
   }
   const d = await res.json();
+  // First call after syncLabFromActual() establishes the baseline against
+  // which subsequent custom edits are compared.
+  if (ST.labBaselineProbs == null) {
+    ST.labBaselineProbs = { Buy: d.probs.Buy, Hold: d.probs.Hold, Sell: d.probs.Sell, pred: d.pred_label };
+  }
   paintLabOutput(d.probs.Buy, d.probs.Hold, d.probs.Sell, d.pred_label);
 }
 
@@ -915,17 +896,31 @@ function paintLabOutput(pBuy, pHold, pSell, pred) {
   $("labHoldVal").textContent = pHold.toFixed(3);
   $("labSellVal").textContent = pSell.toFixed(3);
 
-  // delta vs actual
-  if (ST.bundle && ST.idx >= 0) {
-    const b = ST.bundle, i = ST.idx;
-    const actualSig = b.active_signals[i];
-    const probs = { Buy: b.active_probs.Buy[i], Hold: b.active_probs.Hold[i], Sell: b.active_probs.Sell[i] };
-    const actualConf = probs[actualSig] || 0;
-    const newConf = pred === "Buy" ? pBuy : pred === "Sell" ? pSell : pHold;
-    const delta = newConf - actualConf;
-    const cls = delta > 0 ? "up" : delta < 0 ? "down" : "";
-    $("labConfDelta").innerHTML =
-      `confidence ${actualConf.toFixed(3)} → ${newConf.toFixed(3)} <span class="${cls}">${delta >= 0 ? "+" : ""}${delta.toFixed(3)}</span>`;
+  // Delta vs Lab baseline (final-fit on actual features) — only meaningful
+  // once a baseline has been established (after the first /predict_custom call).
+  // Compares the full probability vector L1 distance, plus headline confidence.
+  if (ST.labBaselineProbs) {
+    const base = ST.labBaselineProbs;
+    const baseConf = base.pred === "Buy" ? base.Buy : base.pred === "Sell" ? base.Sell : base.Hold;
+    const newConf  = pred === "Buy" ? pBuy : pred === "Sell" ? pSell : pHold;
+    const dBuy  = pBuy  - base.Buy;
+    const dHold = pHold - base.Hold;
+    const dSell = pSell - base.Sell;
+    const l1 = Math.abs(dBuy) + Math.abs(dHold) + Math.abs(dSell);
+    if (pred === base.pred && l1 < 1e-6) {
+      $("labConfDelta").innerHTML =
+        `<span class="muted">unchanged from actual baseline (${base.pred} ${baseConf.toFixed(3)})</span>`;
+    } else {
+      const sigChanged = pred !== base.pred;
+      const cls = sigChanged ? "up" : (newConf > baseConf ? "up" : newConf < baseConf ? "down" : "");
+      $("labConfDelta").innerHTML =
+        `baseline ${base.pred} ${baseConf.toFixed(3)} → <span class="${cls}">${pred} ${newConf.toFixed(3)}</span> · ` +
+        `ΔBuy ${dBuy >= 0 ? "+" : ""}${dBuy.toFixed(3)} ` +
+        `ΔHold ${dHold >= 0 ? "+" : ""}${dHold.toFixed(3)} ` +
+        `ΔSell ${dSell >= 0 ? "+" : ""}${dSell.toFixed(3)}`;
+    }
+  } else {
+    $("labConfDelta").innerHTML = `<span class="muted">computing baseline…</span>`;
   }
 }
 

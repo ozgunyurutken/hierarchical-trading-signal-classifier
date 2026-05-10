@@ -766,8 +766,9 @@ select, input { font-family: inherit; }
   color: var(--txt-2);
   margin-bottom: 10px;
 }
-.lab-conf-delta .up   { color: var(--buy); }
-.lab-conf-delta .down { color: var(--sell); }
+.lab-conf-delta .up    { color: var(--buy); }
+.lab-conf-delta .down  { color: var(--sell); }
+.lab-conf-delta .muted { color: var(--txt-3); font-style: italic; }
 
 .lab-bars { display: flex; flex-direction: column; gap: 4px; }
 .lab-bar {
