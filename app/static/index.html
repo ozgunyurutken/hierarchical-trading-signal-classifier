@@ -82,12 +82,15 @@
     </section>
 
     <section class="card">
-      <h2>Equity Curves (best per-asset)</h2>
+      <h2>Trade Timeline — selected configuration</h2>
       <p class="explainer">
-        Cumulative equity from $1 starting capital over the OOF span (walk-forward predictions, 0.1% transaction cost).
-        Best Stage 3 strategy compared with Buy &amp; Hold benchmark.
+        <b>Top:</b> price (log) with Buy entries (▲ green) and Sell exits (▼ red) for the chosen rule.
+        Selected date is highlighted in orange.
+        <b>Bottom:</b> cumulative equity (strategy vs Buy &amp; Hold).
       </p>
-      <canvas id="equityChart"></canvas>
+      <div id="tradeStats" class="trade-stats"></div>
+      <canvas id="priceChart"></canvas>
+      <canvas id="equityChart" style="margin-top: 8px;"></canvas>
       <div id="equityLabel" class="explainer"></div>
     </section>
 

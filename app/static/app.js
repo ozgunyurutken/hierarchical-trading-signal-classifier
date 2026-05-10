@@ -1,8 +1,10 @@
-// V5 Hierarchical Trading Signal Classifier — minimal frontend.
+// V5 Hierarchical Trading Signal Classifier — frontend.
 // Reads OOF predictions via FastAPI backend (no on-the-fly inference).
 
 const $ = (id) => document.getElementById(id);
+let priceChart = null;
 let equityChart = null;
+let currentTimeline = null;
 
 async function init() {
   const health = await fetch("/health").then(r => r.json());
@@ -18,6 +20,12 @@ async function init() {
 
   assetSel.addEventListener("change", onAssetChange);
   $("predictBtn").addEventListener("click", onPredict);
+
+  // Re-render timeline when arch/model/rule changes
+  for (const id of ["arch", "model", "rule"]) {
+    $(id).addEventListener("change", () => loadTimeline($("asset").value));
+  }
+
   await onAssetChange();
 }
 
@@ -26,13 +34,13 @@ async function onAssetChange() {
   const dates = await fetch(`/test_dates/${asset}`).then(r => r.json());
   const dateSel = $("date");
   dateSel.innerHTML = "";
-  // Show recent dates first; user usually wants the latest
   for (const d of dates.dates.slice().reverse()) {
     const opt = document.createElement("option");
     opt.value = d; opt.textContent = d;
     dateSel.appendChild(opt);
   }
-  await loadEquity(asset);
+  dateSel.addEventListener("change", () => updateSelectedDate(dateSel.value));
+  await loadTimeline(asset);
 }
 
 async function onPredict() {
@@ -85,35 +93,145 @@ async function onPredict() {
   } else {
     $("fwd").textContent = "—";
   }
+
+  // Highlight selected date on timeline
+  updateSelectedDate(date);
 }
 
-async function loadEquity(asset) {
-  const data = await fetch(`/equity/${asset}`).then(r => r.json());
-  if (data.dates.length === 0) {
-    $("equityLabel").textContent = "(no equity data)";
-    return;
-  }
-  $("equityLabel").textContent = `Best Stage 3: ${data.best_label} (vs Buy & Hold)`;
+function updateSelectedDate(dateStr) {
+  if (!currentTimeline || !priceChart) return;
+  const idx = currentTimeline.dates.indexOf(dateStr);
+  if (idx < 0) return;
+  // Update vertical line annotation by re-rendering datasets is heavy;
+  // instead use Chart.js plugin via custom annotation dataset.
+  // We handle this by storing index and re-drawing the marker dataset.
+  drawTimeline(currentTimeline, idx);
+}
 
-  const ctx = $("equityChart").getContext("2d");
-  if (equityChart) equityChart.destroy();
-  equityChart = new Chart(ctx, {
+async function loadTimeline(asset) {
+  const arch  = $("arch").value;
+  const model = $("model").value;
+  const rule  = $("rule").value;
+  const url = `/timeline?asset=${asset}&arch=${arch}&model=${model}&rule=${rule}`;
+  const data = await fetch(url).then(r => r.json());
+  currentTimeline = data;
+  drawTimeline(data, -1);
+  drawStats(data);
+}
+
+function drawStats(d) {
+  const winColor = d.win_rate >= 0.5 ? "pos" : "neg";
+  const retColor = d.final_return >= d.bh_final_return ? "pos" : "neg";
+  $("tradeStats").innerHTML = `
+    <div class="stat"><label>Config</label><b>${d.label}</b></div>
+    <div class="stat"><label>Trades</label><b>${d.n_trades}</b></div>
+    <div class="stat ${winColor}"><label>Win Rate</label><b>${(d.win_rate*100).toFixed(1)}%</b></div>
+    <div class="stat ${d.final_return >= 0 ? 'pos' : 'neg'}"><label>Strategy Return</label><b>${(d.final_return*100).toFixed(1)}%</b></div>
+    <div class="stat ${d.bh_final_return >= 0 ? 'pos' : 'neg'}"><label>B&amp;H Return</label><b>${(d.bh_final_return*100).toFixed(1)}%</b></div>
+    <div class="stat ${retColor}"><label>Edge vs B&amp;H</label><b>${((d.final_return - d.bh_final_return)*100).toFixed(1)} pp</b></div>
+  `;
+  $("equityLabel").textContent = `Stage 3 strategy: ${d.label} (vs Buy & Hold benchmark)`;
+}
+
+function drawTimeline(d, selectedIdx) {
+  const buyMarkers  = [];
+  const sellMarkers = [];
+  for (let i = 0; i < d.dates.length; i++) {
+    if (d.signals[i] === "Buy")  buyMarkers.push({ x: d.dates[i], y: d.prices[i] });
+    if (d.signals[i] === "Sell") sellMarkers.push({ x: d.dates[i], y: d.prices[i] });
+  }
+  const selected = (selectedIdx >= 0)
+    ? [{ x: d.dates[selectedIdx], y: d.prices[selectedIdx] }]
+    : [];
+
+  // === Price chart ===
+  const ctxP = $("priceChart").getContext("2d");
+  if (priceChart) priceChart.destroy();
+  priceChart = new Chart(ctxP, {
     type: "line",
     data: {
-      labels: data.dates,
+      labels: d.dates,
       datasets: [
         {
-          label: `Stage 3: ${data.best_label}`,
-          data: data.best,
-          borderColor: asset === "BTC" ? "#f7931a" : "#627eea",
-          borderWidth: 1.6,
+          label: `${d.asset} Close`,
+          data: d.prices,
+          borderColor: d.asset === "BTC" ? "#f7931a" : "#627eea",
+          borderWidth: 1.0,
           pointRadius: 0,
           tension: 0.0,
         },
         {
+          label: "Buy entry",
+          data: buyMarkers,
+          backgroundColor: "rgba(58, 138, 58, 0.85)",
+          borderColor: "#1f5a1f",
+          borderWidth: 1.0,
+          showLine: false,
+          pointStyle: "triangle",
+          pointRadius: 5,
+          pointRotation: 0,
+        },
+        {
+          label: "Sell exit",
+          data: sellMarkers,
+          backgroundColor: "rgba(204, 68, 68, 0.85)",
+          borderColor: "#7a2222",
+          borderWidth: 1.0,
+          showLine: false,
+          pointStyle: "triangle",
+          pointRadius: 5,
+          pointRotation: 180,
+        },
+        {
+          label: "Selected date",
+          data: selected,
+          backgroundColor: "rgba(247, 147, 26, 1.0)",
+          borderColor: "#a96012",
+          borderWidth: 2,
+          showLine: false,
+          pointStyle: "circle",
+          pointRadius: 9,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      parsing: false,
+      scales: {
+        x: { type: "category", ticks: { maxTicksLimit: 10, autoSkip: true } },
+        y: { type: "logarithmic", title: { display: true, text: `${d.asset} price ($)` } },
+      },
+      plugins: {
+        legend: { position: "top" },
+        tooltip: { mode: "index", intersect: false },
+      },
+    },
+  });
+
+  // === Equity chart ===
+  const ctxE = $("equityChart").getContext("2d");
+  if (equityChart) equityChart.destroy();
+  equityChart = new Chart(ctxE, {
+    type: "line",
+    data: {
+      labels: d.dates,
+      datasets: [
+        {
+          label: `Strategy ${d.label}`,
+          data: d.equity,
+          borderColor: d.asset === "BTC" ? "#f7931a" : "#627eea",
+          backgroundColor: d.asset === "BTC" ? "rgba(247,147,26,0.15)" : "rgba(98,126,234,0.15)",
+          borderWidth: 1.6,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.0,
+        },
+        {
           label: "Buy & Hold",
-          data: data.buy_hold,
-          borderColor: "#666666",
+          data: d.bh_equity,
+          borderColor: "#666",
           borderDash: [4, 4],
           borderWidth: 1.4,
           pointRadius: 0,
@@ -126,8 +244,8 @@ async function loadEquity(asset) {
       maintainAspectRatio: false,
       animation: false,
       scales: {
-        x: { display: true, ticks: { maxTicksLimit: 8 } },
-        y: { type: "logarithmic", title: { display: true, text: "Equity (log, $1 start)" } },
+        x: { ticks: { maxTicksLimit: 10, autoSkip: true } },
+        y: { type: "logarithmic", title: { display: true, text: "Equity ($1 start)" } },
       },
       plugins: {
         legend: { position: "top" },

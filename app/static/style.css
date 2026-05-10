@@ -191,4 +191,22 @@ footer {
   color: var(--muted);
 }
 
-#equityChart { max-height: 360px; }
+#priceChart  { max-height: 320px; }
+#equityChart { max-height: 240px; }
+
+.trade-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 10px 12px;
+  background: #fafbfd;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 0.92em;
+}
+.trade-stats .stat { display: flex; flex-direction: column; min-width: 110px; }
+.trade-stats .stat label { font-size: 0.72em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.trade-stats .stat b { color: var(--text); font-size: 1.05em; }
+.trade-stats .stat.pos b { color: var(--buy); }
+.trade-stats .stat.neg b { color: var(--sell); }

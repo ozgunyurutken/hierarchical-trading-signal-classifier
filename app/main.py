@@ -252,6 +252,122 @@ async def equity(asset: str) -> dict:
     }
 
 
+@app.get("/timeline")
+async def timeline(
+    asset: str = Query(..., description="BTC or ETH"),
+    arch:  str = Query("default"),
+    model: str = Query("default"),
+    rule:  str = Query("default"),
+) -> dict:
+    """Full timeline for visualization: dates, prices, signals, positions, equity, B&H equity.
+
+    Used by the front-end to draw trade markers on a price chart and a synced equity panel.
+    """
+    asset = asset.upper()
+    if asset not in ASSETS:
+        raise HTTPException(status_code=400, detail=f"Unknown asset: {asset}")
+
+    best = BEST_PER_ASSET[asset]
+    if arch  == "default": arch  = best["arch"]
+    if model == "default": model = best["model"]
+    if rule  == "default": rule  = best["rule"]
+
+    oof = _load_oof(asset, model, arch)
+    prices = state["price_cache"][asset].reindex(oof.index)
+    pred = oof["pred_label"]
+
+    # --- positions per rule ---
+    if rule == "stateful":
+        pos = _positions_stateful(pred)
+    elif rule == "defensive":
+        pos = (pred == "Buy").astype(float)
+    elif rule == "prob_weighted":
+        pos = (oof["P_Buy"] - oof["P_Sell"]).clip(lower=0.0, upper=1.0)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown rule: {rule}")
+
+    # --- daily returns and equity ---
+    px_ret = prices.pct_change().fillna(0.0)
+    pos_lag = pos.shift(1).fillna(0.0)
+    strat_ret = pos_lag * px_ret
+    pos_change = pos.diff().abs().fillna(0.0)
+    cost = pos_change * 0.001  # 0.1% TC
+    strat_ret_net = strat_ret - cost
+    equity = (1.0 + strat_ret_net).cumprod()
+    bh_equity = (1.0 + px_ret).cumprod()
+
+    # --- trade events (entry/exit dates with realized return per round-trip) ---
+    trades = []
+    in_trade = False
+    entry_date, entry_eq, entry_price = None, None, None
+    pos_arr = pos.values
+    eq_arr = equity.values
+    px_arr = prices.values
+    dates_arr = list(oof.index)
+    for i in range(len(pos_arr)):
+        prev_pos = pos_arr[i - 1] if i > 0 else 0.0
+        cur_pos = pos_arr[i]
+        if cur_pos > 0 and prev_pos == 0:
+            in_trade = True
+            entry_date = dates_arr[i]
+            entry_eq = eq_arr[i]
+            entry_price = px_arr[i]
+        elif cur_pos == 0 and prev_pos > 0 and in_trade:
+            ret_pct = (eq_arr[i] / entry_eq) - 1.0
+            trades.append({
+                "entry_date":  entry_date.strftime("%Y-%m-%d"),
+                "exit_date":   dates_arr[i].strftime("%Y-%m-%d"),
+                "entry_price": float(entry_price),
+                "exit_price":  float(px_arr[i]),
+                "return_pct":  float(ret_pct),
+                "won":         bool(ret_pct > 0),
+            })
+            in_trade = False
+    if in_trade:
+        ret_pct = (eq_arr[-1] / entry_eq) - 1.0
+        trades.append({
+            "entry_date":  entry_date.strftime("%Y-%m-%d"),
+            "exit_date":   None,
+            "entry_price": float(entry_price),
+            "exit_price":  float(px_arr[-1]),
+            "return_pct":  float(ret_pct),
+            "won":         bool(ret_pct > 0),
+        })
+
+    n_trades = len(trades)
+    win_rate = (sum(1 for t in trades if t["won"]) / n_trades) if n_trades else 0.0
+
+    return {
+        "asset":      asset,
+        "arch":       arch,
+        "model":      model,
+        "rule":       rule,
+        "label":      f"{arch}/{model}/{rule}",
+        "dates":      [d.strftime("%Y-%m-%d") for d in oof.index],
+        "prices":     [float(p) for p in prices.values],
+        "signals":    [str(s) for s in pred.values],
+        "positions":  [float(p) for p in pos.values],
+        "equity":     [float(v) for v in equity.values],
+        "bh_equity":  [float(v) for v in bh_equity.values],
+        "trades":     trades,
+        "n_trades":   n_trades,
+        "win_rate":   win_rate,
+        "final_return":     float(equity.values[-1] - 1.0),
+        "bh_final_return":  float(bh_equity.values[-1] - 1.0),
+    }
+
+
+def _positions_stateful(pred: pd.Series) -> pd.Series:
+    """Stateful long-only: Buy=enter, Sell=exit, Hold=keep."""
+    pos = []
+    state_local = 0
+    for sig in pred.values:
+        if sig == "Buy":   state_local = 1
+        elif sig == "Sell": state_local = 0
+        pos.append(float(state_local))
+    return pd.Series(pos, index=pred.index)
+
+
 @app.get("/")
 async def root():
     return FileResponse(PROJECT_ROOT / "app" / "static" / "index.html")
