@@ -425,15 +425,6 @@ Our most striking finding is the asset-specific architecture optimum: 3-Stage Fu
 \section{Conclusion}
 We presented a three-stage hierarchical soft-fusion framework for cryptocurrency trading-signal classification, evaluated on BTC and ETH daily data with walk-forward cross-validation, Optuna hyperparameter tuning, four-classifier comparisons, and a four-architecture ablation. The framework achieves an annualised Sharpe of $1.15$ on BTC and a clean Sharpe-plus-return win on ETH versus Buy~\&~Hold---particularly striking given that ETH's Buy~\&~Hold lost $7\%$ over the test span while our model returned $+26\%$. Two findings stand out. First, \emph{architectural depth is asset-specific}: the full hierarchy helps BTC but overfits ETH, where a flat 6-feature baseline wins. Second, \emph{frame-level metrics underestimate trade-level value}: a macro-F1 of $0.37$ and AUC of $0.53$ nonetheless yield Sharpe $1.15$ once a Hold-aware trading rule is applied. The pipeline, code, and OOF predictions are reproducible and packaged in a single Docker container with a FastAPI back-end and Chart.js front-end for the live demonstration required by the course.
 
-%% ===================== AUTHOR CONTRIBUTIONS =====================
-\section*{Author Contributions}
-\begin{itemize}\setlength{\itemsep}{1pt}
-\item \textbf{Ç.~Bilgin} (504251013) led the \emph{data pipeline and Stage~1}: BTC/ETH OHLCV ingestion, the FRED macro-covariate alignment with publication-release lags, the ZigZag offline trend label and its causal-revisability test, and the Stage-1 classifier results---i.e.~Sections~\ref{sec:dataset}, II-D, and IV-A.
-\item \textbf{Ö.~C.~Yürütken} (707251003) led the \emph{model layer and soft fusion}: the Stage-2 macro finite-state machine, the Stage-3 architecture and feature concatenation~$z_t$, the four classifier implementations, the Optuna hyperparameter search, and the Stage-3 results---i.e.~Sections~II-B, \ref{sec:fsm}, \ref{sec:classifiers}, and IV-B.
-\item \textbf{Y.~Demirel} (704252001) led the \emph{experimental infrastructure and system}: the walk-forward cross-validation harness, the four-architecture ablation, the trading-rule backtest, the FastAPI demo and Docker container bundle---i.e.~Sections~III, \ref{sec:arch_ablation}, IV-D, V, and the system component required by the course.
-\end{itemize}
-All authors jointly designed the study, contributed to the discussion, and revised the manuscript.
-
 \FloatBarrier  % flush all pending floats before bibliography (prevents figures landing after references)
 
 %% ===================== REFERENCES =====================
