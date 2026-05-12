@@ -335,7 +335,7 @@
         <li>16 boyutlu Stage 3 özellik vektörü kırılımı.</li>
         <li>4 model varsayımı karşılaştırması.</li>
       </ul>
-      <div class="figs">🎨 Görseller: <code>fig_arch_diagram</code>, <code>fig_stage2_fsm</code>, <code>fig_stage3_roc_curves</code></div>
+      <div class="figs">🎨 Görseller: pipeline inline SVG (sayfa üstü), <code>fig_stage2_fsm</code>, <code>fig_stage3_roc_curves</code></div>
     </div>
 
     <div class="role r3">
@@ -553,13 +553,13 @@
 
   <p>
     Bunu kanıtlamak için <strong>lookahead testi</strong> ürettik: 106 farklı tarihte ZigZag'i o günün
-    verisiyle yeniden hesapladık. <strong>42'sinde</strong> sonuç orijinal etiketten farklı çıktı.
+    verisiyle yeniden hesapladık. <strong>44'ünde (yaklaşık %42)</strong> sonuç orijinal etiketten farklı çıktı.
     Yani ZigZag etiketi gerçekten retrospektif — bu yüzden ML modeli şart, kural-tabanlı kullanılamaz.
   </p>
 
   <figure>
     <img src="paper/figures/fig_zigzag_lookahead.png" alt="ZigZag lookahead test">
-    <figcaption><strong>Şekil 2.</strong> ZigZag retrospektiflik kanıtı — 106 noktanın 42'sinde geçmişte hesaplanan etiket bugünün etiketinden farklı.</figcaption>
+    <figcaption><strong>Şekil 2.</strong> ZigZag retrospektiflik kanıtı — 106 noktanın 44'ünde (≈%42) geçmişte hesaplanan etiket bugünün etiketinden farklı.</figcaption>
   </figure>
 
   <h3>4 model, 14 özellik</h3>
@@ -581,9 +581,9 @@
 
   <!-- NEW SVG: Class Balance Bar -->
   <div class="balance-bar" title="BTC Stage 1 sınıf dağılımı">
-    <div style="width:29.6%; background:#e57373;">Down · 29.6%</div>
-    <div style="width:18.2%; background:#90a4ae;">Range · 18.2%</div>
-    <div style="width:52.2%; background:#81c784;">Up · 52.2%</div>
+    <div style="width:28.8%; background:#e57373;">Down · 28.8%</div>
+    <div style="width:17.3%; background:#90a4ae;">Range · 17.3%</div>
+    <div style="width:53.9%; background:#81c784;">Up · 53.9%</div>
   </div>
   <p style="font-size:0.85em; color:var(--text-dim); margin-top:-4px;">
     📊 BTC Stage 1 etiket dağılımı — uptrend baskın çünkü BTC çoğu zaman boğa modunda. Bu yüzden
@@ -593,7 +593,8 @@
   <h3>Sonuç</h3>
   <p>
     Random Forest hem BTC'de (F1m=<strong>0.563</strong>) hem ETH'de (F1m=<strong>0.571</strong>) en iyisi.
-    <span class="first-use">AUC <span class="expansion">(Area Under ROC Curve — sıralama kalitesi; 0.5 chance, 1.0 mükemmel)</span></span> 0.74–0.76.
+    Tüm 8 yapılandırma (4 model × 2 asset) F1m ≥ 0.50 hedefini geçti — un-tuned baseline'a göre belirgin
+    iyileşme. Sınıf-bazında detay konfüzyon matrislerinde (Şekil 3).
   </p>
 
   <figure>
@@ -688,7 +689,7 @@ y_t = Sell  eğer (P_{t+5} - P_t) / P_t < -0.5 × σ_t
 y_t = Hold  diğer durumda</code></pre>
   <p>
     Burada σ_t = son 20 günün <strong>causal</strong> standart sapması (ileriye bakmaz).
-    <strong>Niye 0.5 sigma?</strong> k=0.5 değerinde sınıflar dengeli (%43 Buy / %23 Hold / %34 Sell).
+    <strong>Niye 0.5 sigma?</strong> k=0.5 değerinde sınıflar dengeli (BTC için %43.6 Buy / %21.7 Hold / %34.8 Sell; ETH için %43.4 / %22.1 / %34.5).
   </p>
 
   <!-- NEW SVG: Stage 3 16-dim feature vector breakdown -->
@@ -803,10 +804,9 @@ y_t = Hold  diğer durumda</code></pre>
     eğrileri. Hold sınıfının AUC'si en yüksek — model 'emin değilim' demeyi en iyi öğreniyor.</figcaption>
   </figure>
 
-  <figure class="wide-fig">
-    <img src="paper/figures/fig_arch_diagram.png" alt="Architecture diagram">
-    <figcaption><strong>Şekil 8.</strong> Hiyerarşik mimari blok-diyagramı (TikZ ile çizildi). Soft fusion çıktıları sürekli ok ile gösterilmiş.</figcaption>
-  </figure>
+  <p style="font-size:0.9em; color:var(--text-dim);">
+    <em>Hiyerarşik mimarinin blok-diyagramı bu sayfanın üst kısmındaki "Pipeline Tek Bakışta" bölümünde inline SVG olarak verilmiştir.</em>
+  </p>
 </section>
 
 <!-- ============================================================
@@ -879,7 +879,7 @@ y_t = Hold  diğer durumda</code></pre>
       <rect x="860" y="40" width="14" height="14" fill="#81c784"/>
       <text x="880" y="52" fill="#cbd5e0" font-size="11">Validate (200g)</text>
     </svg>
-    <div class="caption"><strong>Şekil 9.</strong> Walk-forward CV yapısı — train her fold'da büyür, gap leakage'ı önler, validate sabit 200 gün. Hiçbir fold "gelecekten geçmişe" tahmin yapmaz.</div>
+    <div class="caption"><strong>Şekil 8.</strong> Walk-forward CV yapısı — train her fold'da büyür, gap leakage'ı önler, validate sabit 200 gün. Hiçbir fold "gelecekten geçmişe" tahmin yapmaz.</div>
   </div>
 
   <ul>
@@ -899,7 +899,7 @@ y_t = Hold  diğer durumda</code></pre>
   <h3>Software</h3>
   <p>
     Python 3.11, scikit-learn 1.8, XGBoost 3.2, LightGBM 4.6, Optuna 4.8. Hepsi tek bir
-    MacBook Air M1'de döndü, <strong>1 saat 43 dakika</strong> total walk-forward + tuning.
+    2024 MacBook Air M3 (16 GB RAM)'de döndü, <strong>1 saat 43 dakika</strong> total walk-forward + tuning.
   </p>
 </section>
 
@@ -932,12 +932,12 @@ y_t = Hold  diğer durumda</code></pre>
 
   <figure>
     <img src="paper/figures/fig_arch_heatmap.png" alt="Architecture × Model heatmap">
-    <figcaption><strong>Şekil 10.</strong> 4 mimari × 4 model × 2 asset Sharpe heatmap. BTC bloğunda derinleşen mimari koyu yeşil, ETH bloğunda tersine — no-free-lunch'ın görsel kanıtı.</figcaption>
+    <figcaption><strong>Şekil 9.</strong> 4 mimari × 4 model × 2 asset Sharpe heatmap. BTC bloğunda derinleşen mimari koyu yeşil, ETH bloğunda tersine — no-free-lunch'ın görsel kanıtı.</figcaption>
   </figure>
 
   <figure>
     <img src="paper/figures/fig_arch_equity.png" alt="Equity curves comparison">
-    <figcaption><strong>Şekil 11.</strong> 4 mimarinin BTC + ETH için equity curve'leri. BTC'de 3-Stage en yüksek; ETH'de Flat baseline en yüksek.</figcaption>
+    <figcaption><strong>Şekil 10.</strong> 4 mimarinin BTC + ETH için equity curve'leri. BTC'de 3-Stage en yüksek; ETH'de Flat baseline en yüksek.</figcaption>
   </figure>
 
   <div class="callout danger">
@@ -995,8 +995,7 @@ y_t = Hold  diğer durumda</code></pre>
       <text x="375" y="129" text-anchor="middle" fill="#000" font-size="10" font-weight="700">💵 NAKİT</text>
       <rect x="430" y="80"  width="60"  height="20" fill="#81c784" opacity="0.7"/>
       <text x="460" y="94" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG</text>
-      <text x="540" y="98" fill="#fff" font-size="10" font-weight="700">→ Hold = pozisyonu KORU</text>
-      <text x="540" y="112" fill="#a4b1c2" font-size="10">inert; az trade, az fee</text>
+      <text x="540" y="105" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">2 trade</strong> (Sell'de çık, Buy'da gir)</text>
 
       <!-- Rule 2: Defensive Reset -->
       <text x="40" y="170" fill="#ba68c8" font-size="11" font-weight="700">Defensive</text>
@@ -1008,8 +1007,7 @@ y_t = Hold  diğer durumda</code></pre>
       <text x="320" y="207" text-anchor="middle" fill="#000" font-size="10" font-weight="700">💵 NAKİT (Hold dahil!)</text>
       <rect x="430" y="158" width="60" height="20" fill="#81c784" opacity="0.7"/>
       <text x="460" y="172" text-anchor="middle" fill="#000" font-size="10" font-weight="700">📈 LONG</text>
-      <text x="540" y="176" fill="#fff" font-size="10" font-weight="700">→ Hold = NAKİTE GEÇ</text>
-      <text x="540" y="190" fill="#a4b1c2" font-size="10">paranoid; sık trade, yüksek fee</text>
+      <text x="540" y="183" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">4 trade</strong> (Hold = nakit, çok savunmacı)</text>
 
       <!-- Rule 3: Probability-Weighted -->
       <text x="40" y="248" fill="#ffb74d" font-size="11" font-weight="700">Probability</text>
@@ -1032,10 +1030,9 @@ y_t = Hold  diğer durumda</code></pre>
         <rect x="430" y="246" width="50" height="14" fill="#81c784" opacity="0.6"/>
         <text x="455" y="257" text-anchor="middle" fill="#000" font-size="9" font-weight="700">60%</text>
       </g>
-      <text x="540" y="254" fill="#fff" font-size="10" font-weight="700">→ Pozisyon = clip(P_Buy − P_Sell)</text>
-      <text x="540" y="268" fill="#a4b1c2" font-size="10">sürekli; her gün küçük büyüklük ayarı</text>
+      <text x="540" y="261" fill="#a4b1c2" font-size="10">→ <strong style="fill:#fff;">7 küçük ayar</strong> (clip(P_Buy − P_Sell, 0, 1))</text>
     </svg>
-    <div class="caption"><strong>Şekil 12.</strong> 3 trading kuralı aynı tahmin sekansına nasıl tepki verir. Stateful = inertial, defensive = paranoid, probability-weighted = sürekli.</div>
+    <div class="caption"><strong>Şekil 11.</strong> 3 trading kuralı aynı tahmin sekansına nasıl tepki verir. Stateful = inertial, defensive = paranoid, probability-weighted = sürekli.</div>
   </div>
 
   <h3>Sonuç</h3>
@@ -1137,7 +1134,7 @@ y_t = Hold  diğer durumda</code></pre>
       <text x="865" y="258" text-anchor="middle" fill="#a4b1c2" font-size="10">ETH B&amp;H</text>
       <text x="865" y="272" text-anchor="middle" fill="#a4b1c2" font-size="9" font-style="italic">54% daha az kayıp!</text>
     </svg>
-    <div class="caption"><strong>Şekil 13.</strong> Strateji vs. Buy &amp; Hold karşılaştırması — her iki asset için Sharpe yüksek, MaxDD düşük. Risk-adjusted return iyileşmesi bariz.</div>
+    <div class="caption"><strong>Şekil 12.</strong> Strateji vs. Buy &amp; Hold karşılaştırması — her iki asset için Sharpe yüksek, MaxDD düşük. Risk-adjusted return iyileşmesi bariz.</div>
   </div>
 
   <div class="callout success">
@@ -1193,18 +1190,17 @@ y_t = Hold  diğer durumda</code></pre>
   <table>
     <tr><th>Kriter</th><th>Bulunduğu yer</th></tr>
     <tr><td>Title + 3 yazar</td><td>Page 1 başı</td></tr>
-    <tr><td>Abstract (150-250 kelime, no cite/eq/fig)</td><td>Page 1, 210 kelime</td></tr>
+    <tr><td>Abstract (150-250 kelime, no cite/eq/fig)</td><td>Page 1, ~210 kelime</td></tr>
     <tr><td>Introduction + 10+ academic ref</td><td>Page 1-2, 24 ref</td></tr>
-    <tr><td>Dataset description</td><td>Tablo I</td></tr>
+    <tr><td>Dataset description</td><td>Section II.A (prose)</td></tr>
     <tr><td>Mathematical formulation</td><td>Eq (1)-(4), Section II.B</td></tr>
     <tr><td>Model description + assumptions</td><td>Section II.E</td></tr>
     <tr><td>Experimental setup (CV, HP tuning, software, metrics)</td><td>Section III</td></tr>
-    <tr><td>Confusion matrix</td><td>Fig. 4 paper'da (Stage 1 × 8 panel)</td></tr>
-    <tr><td>ROC curves</td><td>Fig. 6 paper'da (Stage 3 × 6 panel)</td></tr>
-    <tr><td>Method comparison</td><td>Tablo II, III, IV</td></tr>
+    <tr><td>Confusion matrix</td><td>Fig. 4 paper'da (Stage 1, 4 model × 2 asset = 8 panel)</td></tr>
+    <tr><td>ROC curves</td><td><code>reports/Phase5.3_roc_auc/v5_p5_stage3_roc_curves.png</code> (supplementary)</td></tr>
+    <tr><td>Method comparison</td><td>Tablo I (architecture ablation: 4 mimari × 2 asset)</td></tr>
     <tr><td>Conclusion</td><td>Section VI</td></tr>
-    <tr><td>References (<span class="first-use">IEEE <span class="expansion">(Institute of Electrical and Electronics Engineers — yayın formatı)</span></span> format)</td><td>Page 8</td></tr>
-    <tr><td>Author contributions</td><td>Sayfa 7</td></tr>
+    <tr><td>References (<span class="first-use">IEEE <span class="expansion">(Institute of Electrical and Electronics Engineers — yayın formatı)</span></span> format)</td><td>Son sayfa (target 4-6 sayfa toplam)</td></tr>
   </table>
 </section>
 
@@ -1356,118 +1352,17 @@ y_t = Hold  diğer durumda</code></pre>
     renderGlossary(document.getElementById("glossary-search").value);
   }
 
-  // === Auto-tooltipify: GLOSSARY'deki kısaltmaları sayfada bul, .term span'ıyla sar ===
-  // (ilk kullanım `.first-use` ile inline açıklı, sonraki kullanımlarda hover tooltip için)
-  function autoTooltipify() {
-    // Anahtar genişletme: "BTC / ETH" gibi multi-key entry'leri ayır
-    const flat = [];
-    GLOSSARY.forEach(([k, v]) => {
-      k.split(/\s*\/\s*/).forEach(part => flat.push([part.trim(), v]));
-    });
-    // Ek alias'lar (sözlükte uzun form, metinde kısa form geçenler)
-    const aliases = [
-      ['Bitcoin', 'Bitcoin — projedeki birinci kripto varlık (BTC)'],
-      ['Ethereum', 'Ethereum — projedeki ikinci kripto varlık (ETH)'],
-      ['Random Forest', 'Çok sayıda karar ağacının bagging ile birleştirilmesi (RF)'],
-      ['XGBoost', 'Gradient-boosted decision trees, regülerizasyonlu (XGB)'],
-      ['LightGBM', "Microsoft'un leaf-wise boosted trees, hızlı (LGBM)"],
-      ['Posterior', 'Veriye bakıldıktan sonra hesaplanan sınıf olasılığı'],
-      ['Lookahead bias', 'Modelin tahmin sırasında geleceği görmesi durumu — yasak'],
-      ['lookahead bias', 'Modelin tahmin sırasında geleceği görmesi durumu — yasak'],
-      ['Soft fusion', 'Hard label yerine olasılık vektörü taşımak'],
-      ['soft fusion', 'Hard label yerine olasılık vektörü taşımak'],
-      ['Walk-forward CV', "Zaman-sıralı doğrulama; train hep test'ten önce"],
-      ['walk-forward CV', "Zaman-sıralı doğrulama; train hep test'ten önce"],
-      ['Walk-forward', "Zaman-sıralı doğrulama"],
-      ['walk-forward', "Zaman-sıralı doğrulama"],
-      ['Optuna', 'Bayesian hyperparameter optimization kütüphanesi'],
-      ['FastAPI', 'Modern Python web framework, async + type-hint'],
-      ['z-score', "(değer − ortalama) / standart sapma"],
-      ['posterior', 'Veriye bakıldıktan sonra hesaplanan sınıf olasılığı'],
-    ];
-    aliases.forEach(a => flat.push(a));
-
-    // Uzundan kısaya sırala (önce "FedFunds" sonra "M2" — nested match'leri engellemek için)
-    flat.sort((a, b) => b[0].length - a[0].length);
-    // Map yap (case-insensitive lookup için lower-case key)
-    const lookup = new Map();
-    flat.forEach(([k, v]) => { if (!lookup.has(k)) lookup.set(k, v); });
-
-    // Regex inşa (özel karakterleri escape, kelime sınırı için custom lookahead/behind)
-    const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = new RegExp(
-      '(?<![A-Za-zÇĞİÖŞÜçğıöşü0-9_])(' +
-      flat.map(([k]) => escapeRe(k)).join('|') +
-      ')(?![A-Za-zÇĞİÖŞÜçğıöşü0-9_])',
-      'g'
-    );
-
-    const SKIP_TAGS = new Set(['SCRIPT','STYLE','CODE','PRE','TEXTAREA','INPUT','OPTION','BUTTON','H1','H2','H3','H4']);
-    const SKIP_CLASSES = new Set(['first-use','expansion','term','close-x']);
-
-    function shouldSkip(node) {
-      if (!node || node.nodeType !== 1) return false;
-      if (SKIP_TAGS.has(node.tagName)) return true;
-      if (node.namespaceURI === 'http://www.w3.org/2000/svg') return true;
-      if (node.id === 'glossary-panel' || node.id === 'glossary-btn') return true;
-      if (node.classList) {
-        for (const c of SKIP_CLASSES) if (node.classList.contains(c)) return true;
-      }
-      // Atadan birinde first-use/term/svg varsa skip
-      let p = node.parentElement;
-      while (p) {
-        if (SKIP_CLASSES.has('first-use') && p.classList && (p.classList.contains('first-use') || p.classList.contains('term'))) return true;
-        if (p.namespaceURI === 'http://www.w3.org/2000/svg') return true;
-        if (p.tagName && SKIP_TAGS.has(p.tagName)) return true;
-        p = p.parentElement;
-      }
-      return false;
-    }
-
-    function walk(node) {
-      if (node.nodeType === 3) {
-        const txt = node.textContent;
-        pattern.lastIndex = 0;
-        if (!pattern.test(txt)) return;
-        pattern.lastIndex = 0;
-        const frag = document.createDocumentFragment();
-        let last = 0, m;
-        while ((m = pattern.exec(txt)) !== null) {
-          if (m.index > last) frag.appendChild(document.createTextNode(txt.slice(last, m.index)));
-          const span = document.createElement('span');
-          span.className = 'term';
-          span.setAttribute('data-tip', lookup.get(m[0]) || '');
-          span.setAttribute('tabindex', '0');
-          span.textContent = m[0];
-          frag.appendChild(span);
-          last = m.index + m[0].length;
-        }
-        if (last < txt.length) frag.appendChild(document.createTextNode(txt.slice(last)));
-        if (frag.childNodes.length) node.parentNode.replaceChild(frag, node);
-      } else if (node.nodeType === 1) {
-        if (shouldSkip(node)) return;
-        const kids = Array.from(node.childNodes);
-        kids.forEach(walk);
-      }
-    }
-
-    const main = document.querySelector('main');
-    if (main) walk(main);
-  }
-
-  // Önce auto-wrap, sonra click handler (event delegation ile yeni eklenenler de çalışsın)
-  autoTooltipify();
-
-  // === Tooltip click-to-show on mobile (event delegation) ===
-  document.addEventListener('click', e => {
-    const term = e.target.closest && e.target.closest('.term');
-    if (term) {
+  // === Tooltip click-to-show on mobile ===
+  document.querySelectorAll('.term').forEach(el => {
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('click', e => {
       e.preventDefault();
-      document.querySelectorAll('.term.tapped').forEach(t => { if (t !== term) t.classList.remove('tapped'); });
-      term.classList.toggle('tapped');
-      return;
-    }
-    if (!e.target.closest('#glossary-panel') && e.target.id !== 'glossary-btn') {
+      document.querySelectorAll('.term.tapped').forEach(t => { if (t !== el) t.classList.remove('tapped'); });
+      el.classList.toggle('tapped');
+    });
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.classList.contains('term') && !e.target.closest('#glossary-panel') && e.target.id !== 'glossary-btn') {
       document.querySelectorAll('.term.tapped').forEach(t => t.classList.remove('tapped'));
     }
   });
