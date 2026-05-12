@@ -25,10 +25,11 @@ Thumbs.db
 notebooks/
 .ipynb_checkpoints/
 
-# Reports (figures, generated) — exclude all except equity curves needed at runtime
+# Reports (figures, generated) — exclude all except files needed at runtime
 reports/
 !reports/Phase5.1_arch_ablation/v5_p5_arch_equity_curves_btc.csv
 !reports/Phase5.1_arch_ablation/v5_p5_arch_equity_curves_eth.csv
+!reports/Phase5.1_arch_ablation/v5_p5_arch_backtest_summary.csv
 
 # Docs / project mgmt
 *.md
@@ -44,8 +45,10 @@ data/processed/btc_features_all.csv
 data/processed/btc_adf_results.csv
 
 # V2/V3/V4 legacy joblib models — V5 backend reads OOF CSV, not joblib.
+# Keep V5 What-If final-fit bundles (used by /predict_custom).
 # Old V2 .bak frontend files
 app/models/
+!app/models/v5/
 app/static/*.bak
 
 # Git / claude / hizir

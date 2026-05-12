@@ -1,0 +1,287 @@
+/* === Reset & Base === */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    background-color: #0f1117;
+    color: #e0e0e0;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+/* === Header === */
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+header h1 {
+    font-size: 2rem;
+    color: #fff;
+    margin-bottom: 0.3rem;
+}
+
+.subtitle {
+    color: #888;
+    font-size: 0.95rem;
+}
+
+/* === Cards === */
+.card {
+    background: #1a1d27;
+    border: 1px solid #2a2d3a;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.card h2 {
+    font-size: 1.2rem;
+    color: #fff;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #2a2d3a;
+    padding-bottom: 0.5rem;
+}
+
+/* === Input Group === */
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.input-group label {
+    color: #aaa;
+    font-size: 0.9rem;
+}
+
+select, input[type="file"] {
+    background: #252830;
+    color: #fff;
+    border: 1px solid #3a3d4a;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+}
+
+select:focus {
+    outline: none;
+    border-color: #5b6eae;
+}
+
+button {
+    background: #5b6eae;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.5rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #6d7fc0;
+}
+
+button:active {
+    background: #4a5d9d;
+}
+
+.hint {
+    color: #666;
+    font-size: 0.85rem;
+    margin-bottom: 0.8rem;
+}
+
+/* === Signal Display === */
+.signal-display {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.signal-badge {
+    padding: 0.8rem 2rem;
+    border-radius: 12px;
+    font-size: 1.8rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 140px;
+}
+
+.signal-buy {
+    background: rgba(46, 204, 113, 0.15);
+    color: #2ecc71;
+    border: 2px solid #2ecc71;
+}
+
+.signal-sell {
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+    border: 2px solid #e74c3c;
+}
+
+.signal-hold {
+    background: rgba(241, 196, 15, 0.15);
+    color: #f1c40f;
+    border: 2px solid #f1c40f;
+}
+
+/* === Confidence Bar === */
+.confidence-container {
+    flex: 1;
+    min-width: 200px;
+}
+
+.confidence-container label {
+    color: #aaa;
+    font-size: 0.85rem;
+    display: block;
+    margin-bottom: 0.3rem;
+}
+
+.progress-bar {
+    background: #252830;
+    border-radius: 6px;
+    height: 24px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.6s ease;
+    background: linear-gradient(90deg, #5b6eae, #8e99d4);
+}
+
+#confidence-value {
+    color: #fff;
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: block;
+    margin-top: 0.3rem;
+}
+
+/* === Stage Breakdown === */
+.stage-breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.stage-card {
+    background: #1f222e;
+    border: 1px solid #2a2d3a;
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.stage-card h3 {
+    font-size: 0.95rem;
+    color: #ccc;
+    margin-bottom: 0.8rem;
+}
+
+.prob-bars .prob-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.prob-item .label {
+    width: 80px;
+    font-size: 0.8rem;
+    color: #aaa;
+    text-align: right;
+}
+
+.prob-item .bar {
+    flex: 1;
+    background: #252830;
+    border-radius: 4px;
+    height: 18px;
+    overflow: hidden;
+}
+
+.prob-item .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.prob-item .value {
+    width: 45px;
+    font-size: 0.8rem;
+    color: #ccc;
+    text-align: right;
+}
+
+/* === Error === */
+.error-card {
+    border-color: #e74c3c;
+}
+
+.error-card h2 {
+    color: #e74c3c;
+}
+
+#error-message {
+    color: #e74c3c;
+}
+
+/* === Loading === */
+#loading {
+    text-align: center;
+    padding: 2rem;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #2a2d3a;
+    border-top-color: #5b6eae;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* === Utilities === */
+.hidden {
+    display: none !important;
+}
+
+/* === Footer === */
+footer {
+    text-align: center;
+    color: #555;
+    font-size: 0.8rem;
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid #1a1d27;
+}
+
+/* === Responsive === */
+@media (max-width: 600px) {
+    header h1 { font-size: 1.5rem; }
+    .signal-badge { font-size: 1.4rem; }
+    .stage-breakdown { grid-template-columns: 1fr; }
+}

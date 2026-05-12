@@ -66,6 +66,13 @@ COPY data/processed/eth_stage3_oof_mlp_v5_tuned_2stage_macro.csv /project/data/p
 # Equity curves (Phase 5.1 ablation, used for /equity endpoint)
 COPY reports/Phase5.1_arch_ablation/v5_p5_arch_equity_curves_btc.csv /project/reports/Phase5.1_arch_ablation/
 COPY reports/Phase5.1_arch_ablation/v5_p5_arch_equity_curves_eth.csv /project/reports/Phase5.1_arch_ablation/
+# Phase 5.1 backtest summary (used by /heatmap + /bundle ablation grid)
+COPY reports/Phase5.1_arch_ablation/v5_p5_arch_backtest_summary.csv /project/reports/Phase5.1_arch_ablation/
+# Full 16-feature Stage 3 dataset (used by /explain, /bundle regime_age + S1 probs + oscillators)
+COPY data/processed/btc_features_stage3_v5.csv /project/data/processed/
+COPY data/processed/eth_features_stage3_v5.csv /project/data/processed/
+# What-If final-fit model bundles (used by /predict_custom)
+COPY app/models/v5/ /project/app/models/v5/
 
 ENV PYTHONPATH=/project
 ENV PYTHONUNBUFFERED=1
