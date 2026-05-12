@@ -68,3 +68,7 @@ data/processed/btc_features_all.csv
 
 # Pre-overnight screenshots (paper figure source images live in docs/paper/figures/)
 Screenshot*.png
+
+# Docker image tar exports (too large for git ~930 MB; share via Drive/Telegram)
+*.tar
+docker/*.tar
