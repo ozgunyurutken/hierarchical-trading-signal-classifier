@@ -1,11 +1,11 @@
 # MEMORY.md - Project State & Decision Log
 
 ## Current Status
-**Active Phase:** Paper finalization on **Phase 5.1 baseline** (Phase G/H/I/J explored but NOT ADOPTED — kept in git history as documentation only)
-**Last Updated:** 2026-05-11 — Checkpoint'e döndük, paper finalize edilecek
+**Active Phase:** Paper finalization on **Phase 5.1 baseline** (Phase G/H/I/J explored but NOT ADOPTED — kept in git history as documentation only). Docker bundle audit + torch removal complete (2026-05-11).
+**Last Updated:** 2026-05-11 — Docker guideline-compliance audit + torch dependency removal (image ~1.7 GB → ~700 MB)
 **Active Branch:** `v5-from-scratch`
 **Tags:** `v5-pre-overnight-2026-05-09`, `v5-pre-improvements-2026-05-10` (clean checkpoint, paper bu state'i kullanır)
-**Latest commit:** `c6c8325` Phase G/H/I/J results (in history but UNUSED in paper)
+**Latest commit:** `76de71d` chore: finalize repo state for submission + Docker testing
 
 > ⚠️ **Paper-writer session uyarısı**: Phase G/H/I/J sonuçları paper'a **dahil edilmiyor**. Tüm figürler ve tablolar `reports/Phase5.1_arch_ablation/` ve önceki Phase 5.x kaynaklarından alınır. `reports/Phase7-10/` ve `data/processed/*_calibrated_*`, `*_oversampled_*`, `*_tuned_3stage_full_regime.csv` dosyaları paper'a dokunmaz.
 
@@ -755,10 +755,62 @@ Dört kanonik unsupervised yaklaşımı birer kez denedik; hepsi yetersiz kaldı
 - `POST /predict {date,model:lda}` → Sell @ %55.6 confidence (2024-08-05, $53,991)
 
 ## Docker
-- `docker/Dockerfile` — Python 3.11-slim, requirements + src + app + 4 CSV bundle
-- `docker/docker-compose.yml` — 8000 port, healthcheck
-- `.dockerignore` — venv, notebooks, .git, raw data, large all-features CSV hariç
-- **Docker bu makinede yüklü değil** → kullanıcı `docker compose -f docker/docker-compose.yml up --build` ile demo öncesi build edecek
+
+### Image içeriği (2026-05-11 itibariyle)
+- **Base:** `python:3.11-slim` (Linux) → Docker Desktop Windows/macOS/Linux'ta sorunsuz.
+- **System deps:** `gcc`, `g++`, `libgomp1`, `curl` (xgboost/lightgbm wheels + healthcheck).
+- **Python deps:** requirements.txt (torch çıkarıldı — aşağı bak).
+- **Source:** `src/`, `app/`, `config.yaml`.
+- **Veri bundle (43 CSV + 32 joblib):**
+  - 2× aligned OHLCV, 2× Stage 2 regime FSM, 2× Stage 1 RF tuned OOF.
+  - 32× Stage 3 OOF tuned (2 asset × 4 arch × 4 model).
+  - 2× Phase 5.1 equity curves, 1× Phase 5.1 backtest summary.
+  - 2× Stage 3 16-feature CSV (regime_age + S1 probs + oscillators for `/bundle`, `/explain`).
+  - **32× What-If final-fit joblib** (`app/models/v5/`) — `/predict_custom` için.
+- **CMD:** `uvicorn app.main:app --host 0.0.0.0 --port 8000`.
+- **Healthcheck:** `curl -f http://localhost:8000/health` (30s interval).
+
+### `.dockerignore` (kritik whitelist'ler)
+- Default'ta `reports/` ve `app/models/` dışlanmış. Whitelist'lerle korunan:
+  - `!reports/Phase5.1_arch_ablation/v5_p5_arch_equity_curves_{btc,eth}.csv`
+  - `!reports/Phase5.1_arch_ablation/v5_p5_arch_backtest_summary.csv`
+  - `!app/models/v5/` (V5 What-If; V2/V3/V4 legacy joblib'ler hariç tutuluyor).
+- `.git/`, `.venv/`, `notebooks/`, `data/raw/`, `*.md` (CLAUDE.md/PLAN.md/MEMORY.md vs.) dışlanmış.
+
+### Guideline uyum durumu (BBL514E Term Project)
+Hocanın `BBL514E TermProject Guideline.pdf` Section 2.B + 5 maddeleri:
+- ✓ **Dockerized** — tek `docker compose up` ile container.
+- ✓ **Backend Model Serving via API** — FastAPI (11 endpoint).
+- ✓ **HTML web interface** — same container, file upload **OR** feature input ("OR" → What-If 22-feature form yeterli, CSV upload zorunlu değil).
+- ✓ **Display prediction + confidence** — pred_label + P_Buy/Hold/Sell.
+- ✓ **Live demo** — Docker container çalışıyor, real-time prediction (<5 sn).
+
+### 2026-05-11 audit + optimizasyon (bu session'da yapıldı)
+
+**Audit bulguları (run dahil tüm endpoint'ler canlı test edildi):**
+- `/health` → 200, ready=true (BTC + ETH yüklü).
+- `/heatmap` → 200, 32 cell + 2 B&H satırı.
+- `/bundle?asset=BTC` → 200, stage1/regime_age/osc tümü 2400/2400 non-null.
+- `/predict_custom` (BTC/3stage_full/xgboost) → 200, gerçek sklearn inference.
+
+**Optimizasyon: torch dependency kaldırıldı (`requirements.txt`).**
+- Kanıt: `sys.modules` introspect — startup tamamlandıktan sonra `torch in sys.modules == False`. V5 joblib'lerdeki MLP'ler `sklearn.neural_network.MLPClassifier` (torch değil).
+- Torch sadece legacy `src/models/classifiers.py` `MLPClassifierWrapper`'da kullanılıyor (V2/V3 train-time, runtime'da hiç çağrılmıyor).
+- requirements.txt'teki 23 paketin hiçbiri torch'u transitif olarak çekmiyor.
+- **Kazanç:** image ~1.7 GB → ~700 MB, build süresi ~3-5 dk → ~1-2 dk.
+
+### Live demo stratejisi (sınıfta `--build` YASAK)
+Guideline: *"If the system does not run during demo, technical score will be significantly reduced."* Sınıfta build etmek riskli (network, pip mirror, wheel resolution). Plan:
+1. **Birincil:** Kendi laptop'unda **önceden build edilmiş + ayağa kalkmış** container, HDMI bağla, demo zamanı sadece tarayıcıyı aç.
+2. **Yedek (USB):** `docker save crypto-signal-classifier:mvp | gzip > crypto-demo-image.tar.gz` (~250-300 MB). Hocanın laptop'unda `docker load` (~30 sn) + `docker run -p 8000:8000` (~5 sn). Internet yok pip yok.
+3. **Asla:** Sınıfta `docker compose up --build`.
+
+### Pre-demo checklist (bir gün önce yapılacak)
+- [ ] Kendi laptop'unda `docker compose -f docker/docker-compose.yml up --build` başarılı.
+- [ ] `http://localhost:8000` BTC + ETH predict + What-If submit hepsi çalışıyor.
+- [ ] `docker save ... | gzip > crypto-demo-image.tar.gz` USB'de yedek.
+- [ ] Laptop tam şarjlı + şarj + HDMI dongle yanında.
+- [ ] Tarayıcıda `localhost:8000` sekme açık ve cache'lenmiş.
 
 ## Iter 2 Sonuçları (2026-05-08)
 

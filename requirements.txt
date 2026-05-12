@@ -13,8 +13,12 @@ xgboost>=2.0.0
 lightgbm>=4.0.0
 optuna>=3.4.0
 
-# Deep learning (MLP)
-torch>=2.1.0
+# Deep learning (MLP) — torch was used by legacy V2/V3 MLPClassifierWrapper in
+# src/models/classifiers.py (train-time only). V5 uses sklearn's MLPClassifier
+# and the Docker runtime never imports torch (verified via sys.modules at
+# startup). Removed to shrink the Docker image by ~1 GB and cut build time by
+# ~2 minutes. If you ever re-run legacy V2/V3 trainers, reinstall with
+# `pip install torch>=2.1.0` outside the container.
 
 # Clustering & regime detection
 hmmlearn>=0.3.0
